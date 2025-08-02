@@ -17,11 +17,9 @@ public class Role {
     @Column(name = "description", columnDefinition = "TEXT")
     private String description;
 
-    // Store permissions as JSON string
     @Column(name = "permissions", columnDefinition = "JSON")
     private String permissions;
 
-    // Getters and setters
 
     public Integer getRoleId() {
         return roleId;

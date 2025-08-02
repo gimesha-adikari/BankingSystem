@@ -23,5 +23,5 @@
 hs_err_pid*
 replay_pid*
 
-#/backend/corebank/src/main/resources/application-prod.yml
-#/backend/corebank/src/main/resources/application-dev.yml
+/backend/corebank/src/main/resources/application-prod.yml
+/backend/corebank/src/main/resources/application-dev.yml

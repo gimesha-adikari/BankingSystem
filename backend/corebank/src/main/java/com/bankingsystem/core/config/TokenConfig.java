@@ -6,10 +6,13 @@ import org.springframework.stereotype.Component;
 @Component
 public class TokenConfig {
 
-    @Value("${app.token.expiration-hours}")
-    private int expirationHours;
+    private final AppProperties appProperties;
+
+    public TokenConfig(AppProperties appProperties) {
+        this.appProperties = appProperties;
+    }
 
     public int getExpirationHours() {
-        return expirationHours;
+        return appProperties.getToken().getExpirationHours();
     }
 }

@@ -35,12 +35,10 @@ public class User {
     @JoinColumn(name = "role_id", nullable = false)
     private Role role;
 
-    // Nullable foreign key to Customer
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "customer_id")
     private Customer customer;
 
-    // Nullable foreign key to Employee
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "employee_id")
     private Employee employee;
@@ -54,7 +52,45 @@ public class User {
     @Column(name = "created_at", nullable = false,updatable = false)
     private LocalDateTime createdAt;
 
-    // Getters and setters
+    @Column(name = "address", columnDefinition = "TEXT")
+    private String address;
+
+    @Column(name = "city", columnDefinition = "TEXT")
+    private String city;
+
+    @Column(name = "state", columnDefinition = "TEXT")
+    private String state;
+
+    @Column(name = "country", columnDefinition = "TEXT")
+    private String country;
+
+    @Column(name = "postal_code", columnDefinition = "TEXT")
+    private String postalCode;
+
+    @Column(name = "home_number", columnDefinition = "TEXT")
+    private String homeNumber;
+
+    @Column(name = "work_number", columnDefinition = "TEXT")
+    private String workNumber;
+
+    @Column(name = "office_number", columnDefinition = "TEXT")
+    private String officeNumber;
+
+    @Column(name = "mobile_number", columnDefinition = "TEXT")
+    private String mobileNumber;
+
+    @Column(name = "is_email_verified", nullable = false)
+    private boolean emailVerified;
+
+    @Column(name = "new_email", unique = true, length = 150)
+    private String newEmail;
+
+    @Column(name = "email_verification_token", length = 255)
+    private String emailVerificationToken;
+
+    @Column(name = "email_verification_token_created_at")
+    private LocalDateTime emailVerificationTokenCreatedAt;
+
 
     public UUID getUserId() {
         return userId;
@@ -150,5 +186,113 @@ public class User {
 
     public void setCreatedAt(LocalDateTime createdAt) {
         this.createdAt = createdAt;
+    }
+
+    public String getAddress() {
+        return address;
+    }
+
+    public void setAddress(String address) {
+        this.address = address;
+    }
+
+    public String getCity() {
+        return city;
+    }
+
+    public void setCity(String city) {
+        this.city = city;
+    }
+
+    public String getState() {
+        return state;
+    }
+
+    public void setState(String state) {
+        this.state = state;
+    }
+
+    public String getCountry() {
+        return country;
+    }
+
+    public void setCountry(String country) {
+        this.country = country;
+    }
+
+    public String getPostalCode() {
+        return postalCode;
+    }
+
+    public void setPostalCode(String postalCode) {
+        this.postalCode = postalCode;
+    }
+
+    public String getHomeNumber() {
+        return homeNumber;
+    }
+
+    public void setHomeNumber(String homeNumber) {
+        this.homeNumber = homeNumber;
+    }
+
+    public String getWorkNumber() {
+        return workNumber;
+    }
+
+    public void setWorkNumber(String workNumber) {
+        this.workNumber = workNumber;
+    }
+
+    public String getOfficeNumber() {
+        return officeNumber;
+    }
+
+    public void setOfficeNumber(String officeNumber) {
+        this.officeNumber = officeNumber;
+    }
+
+    public String getMobileNumber() {
+        return mobileNumber;
+    }
+
+    public void setMobileNumber(String mobileNumber) {
+        this.mobileNumber = mobileNumber;
+    }
+
+    public boolean isEmailVerified() {
+        return emailVerified;
+    }
+
+    public User setEmailVerified(boolean emailVerified) {
+        this.emailVerified = emailVerified;
+        return this;
+    }
+
+    public String getNewEmail() {
+        return newEmail;
+    }
+
+    public User setNewEmail(String newEmail) {
+        this.newEmail = newEmail;
+        return this;
+    }
+
+    public String getEmailVerificationToken() {
+        return emailVerificationToken;
+    }
+
+    public User setEmailVerificationToken(String emailVerificationToken) {
+        this.emailVerificationToken = emailVerificationToken;
+        return this;
+    }
+
+    public LocalDateTime getEmailVerificationTokenCreatedAt() {
+        return emailVerificationTokenCreatedAt;
+    }
+
+    public User setEmailVerificationTokenCreatedAt(LocalDateTime emailVerificationTokenCreatedAt) {
+        this.emailVerificationTokenCreatedAt = emailVerificationTokenCreatedAt;
+        return this;
     }
 }

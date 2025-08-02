@@ -1,5 +1,6 @@
 package com.bankingsystem.core.service.impl;
 
+import com.bankingsystem.core.config.AppProperties;
 import com.bankingsystem.core.dto.ChangePasswordRequest;
 import com.bankingsystem.core.dto.RegisterRequest;
 import com.bankingsystem.core.entity.Role;
@@ -13,7 +14,6 @@ import com.bankingsystem.core.repository.VerificationTokenRepository;
 import com.bankingsystem.core.service.AuthService;
 import com.bankingsystem.core.service.EmailService;
 import lombok.RequiredArgsConstructor;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -35,8 +35,7 @@ public class AuthServiceImpl implements AuthService {
 
     private final VerificationTokenRepository tokenRepository;
     private final EmailService emailService;
-    @Value("${app.token.expiration-hours:24}")  // default to 24 if not set
-    private int expirationHours;
+    private final AppProperties appProperties;
 
     private static final String EMAIL_REGEX = "^[A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+$";
     private static final Pattern EMAIL_PATTERN = Pattern.compile(EMAIL_REGEX);
@@ -85,13 +84,14 @@ public class AuthServiceImpl implements AuthService {
         VerificationToken verificationToken = new VerificationToken();
         verificationToken.setToken(token);
         verificationToken.setUser(user);
-        verificationToken.setExpiryDate(LocalDateTime.now().plusHours(expirationHours));
+        verificationToken.setExpiryDate(LocalDateTime.now().plusHours(appProperties.getToken().getExpirationHours()));
 
         tokenRepository.save(verificationToken);
 
         // Send verification email
         emailService.sendVerificationEmail(user.getEmail(), token);
     }
+
     public boolean verifyEmail(String token) {
         VerificationToken verificationToken = tokenRepository.findByToken(token)
                 .orElseThrow(() -> new RuntimeException("Invalid verification token"));
@@ -102,6 +102,7 @@ public class AuthServiceImpl implements AuthService {
 
         User user = verificationToken.getUser();
         user.setIsActive(true);
+        user.setEmailVerified(true);
         userRepository.save(user);
 
         tokenRepository.delete(verificationToken);
@@ -123,6 +124,7 @@ public class AuthServiceImpl implements AuthService {
 
         sessionRepository.save(session);
     }
+
     @Override
     public void logout(String token) {
         Optional<Session> sessionOpt = sessionRepository.findByToken(token);
