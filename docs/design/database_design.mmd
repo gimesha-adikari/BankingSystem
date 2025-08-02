@@ -1,0 +1,228 @@
+erDiagram
+    CUSTOMER {
+        UUID CustomerID PK
+        VARCHAR FirstName
+        VARCHAR LastName
+        ENUM Gender
+        VARCHAR Email
+        VARCHAR Phone
+        TEXT Address
+        DATE DateOfBirth
+        ENUM Status
+        DATETIME CreatedAt
+        DATETIME UpdatedAt
+    }
+    ACCOUNT {
+        UUID AccountID PK
+        VARCHAR AccountNumber
+        ENUM AccountType
+        ENUM AccountStatus
+        DECIMAL Balance
+        UUID CustomerID FK
+        INT BranchID FK
+        DATETIME CreatedAt
+        DATETIME UpdatedAt
+    }
+    TRANSACTION {
+        UUID TransactionID PK
+        UUID AccountID FK
+        ENUM TransactionType
+        DECIMAL Amount
+        DATETIME Timestamp
+        VARCHAR ReferenceNumber
+        TEXT Description
+    }
+    LOAN {
+        UUID LoanID PK
+        UUID CustomerID FK
+        ENUM LoanType
+        DECIMAL Amount
+        DECIMAL InterestRate
+        INT LoanTerm
+        ENUM PaymentFrequency
+        DECIMAL RemainingBalance
+        ENUM Status
+        DATETIME ApplicationDate
+        DATETIME ApprovalDate
+        DATETIME DueDate
+    }
+    LOANREPAYMENT {
+        UUID RepaymentID PK
+        UUID LoanID FK
+        UUID TransactionID FK
+        DECIMAL Amount
+        DATETIME PaymentDate
+        VARCHAR PaymentMethod
+    }
+    EMPLOYEE {
+        UUID EmployeeID PK
+        VARCHAR FirstName
+        VARCHAR LastName
+        VARCHAR Email
+        VARCHAR Phone
+        INT RoleID FK
+        VARCHAR Department
+        UUID ManagerID FK
+        DATETIME HireDate
+        ENUM Status
+    }
+    ROLE {
+        INT RoleID PK
+        VARCHAR RoleName
+        TEXT Description
+    }
+    USER {
+        UUID UserID PK
+        VARCHAR Username
+        VARCHAR PasswordHash
+        VARCHAR Email
+        INT RoleID FK
+        UUID CustomerID FK
+        UUID EmployeeID FK
+        BOOLEAN IsActive
+        DATETIME LastLoginAt
+        DATETIME CreatedAt
+    }
+    NOTIFICATION {
+        UUID NotificationID PK
+        UUID CustomerID FK
+        TEXT Message
+        ENUM NotificationType
+        DATETIME CreatedAt
+        DATETIME SentAt
+        ENUM DeliveryStatus
+        BOOLEAN ReadStatus
+    }
+    AUDITLOG {
+        UUID AuditLogID PK
+        UUID UserID FK
+        VARCHAR ActionType
+        DATETIME Timestamp
+        VARCHAR IPAddress
+        UUID DeviceID FK
+        TEXT Description
+    }
+    SESSION {
+        UUID SessionID PK
+        UUID UserID FK
+        VARCHAR Token
+        DATETIME LoginTime
+        DATETIME LogoutTime
+        DATETIME ExpiryTime
+        BOOLEAN IsActive
+        VARCHAR IPAddress
+    }
+    CREDITSCORE {
+        UUID CreditScoreID PK
+        UUID CustomerID FK
+        INT Score
+        DATETIME EvaluationDate
+        VARCHAR Source
+        TEXT Notes
+    }
+    AIMODEL {
+        UUID AIModelID PK
+        VARCHAR ModelName
+        VARCHAR ModelVersion
+        VARCHAR ModelType
+        ENUM Status
+        TEXT Description
+        DATETIME CreatedAt
+        DATETIME LastTrainedAt
+    }
+    SYSTEMCONFIG {
+        UUID ConfigID PK
+        VARCHAR ConfigKey
+        TEXT ConfigValue
+        VARCHAR ConfigType
+        TEXT Description
+    }
+    FILESTORAGE {
+        UUID FileID PK
+        UUID CustomerID FK
+        VARCHAR FileName
+        VARCHAR FileType
+        INT FileSize
+        VARCHAR Checksum
+        VARCHAR FilePath
+        DATETIME UploadedAt
+    }
+    SUPPORTTICKET {
+        UUID TicketID PK
+        UUID CustomerID FK
+        VARCHAR Subject
+        TEXT Description
+        ENUM Status
+        ENUM Priority
+        UUID AssignedToEmployeeID FK
+        DATETIME CreatedAt
+        DATETIME UpdatedAt
+    }
+    FEEDBACK {
+        UUID FeedbackID PK
+        UUID CustomerID FK
+        TEXT FeedbackText
+        INT Rating
+        ENUM ResponseStatus
+        DATETIME SubmittedAt
+    }
+    BRANCH {
+        INT BranchID PK
+        VARCHAR BranchName
+        TEXT Address
+        VARCHAR ContactNumber
+        UUID ManagerEmployeeID FK
+    }
+    SCHEDULEDTRANSACTION {
+        UUID ScheduledTransactionID PK
+        UUID AccountID FK
+        ENUM TransactionType
+        DECIMAL Amount
+        DATETIME ScheduledDate
+        VARCHAR RecurrencePattern
+        ENUM Status
+    }
+    DEVICE {
+        UUID DeviceID PK
+        UUID CustomerID FK
+        VARCHAR DeviceType
+        VARCHAR DeviceToken
+        DATETIME RegisteredAt
+        DATETIME LastUsedAt
+        BOOLEAN IsActive
+    }
+    CARD {
+        UUID CardID PK
+        UUID AccountID FK
+        UUID LinkedCustomerID FK
+        VARCHAR CardNumber
+        ENUM CardType
+        DATE ExpiryDate
+        VARCHAR CVV
+        ENUM Status
+        DATETIME IssuedAt
+        DATETIME CreatedAt
+        DATETIME UpdatedAt
+    }
+
+%% Relationships
+    CUSTOMER ||--o{ ACCOUNT : owns
+    ACCOUNT ||--o{ TRANSACTION : has
+    CUSTOMER ||--o{ LOAN : applies
+    LOAN ||--o{ LOANREPAYMENT : receives
+    EMPLOYEE }o--|| ROLE : has
+    USER }o--|| ROLE : assigned
+    USER ||--|| CUSTOMER : "optional link"
+    USER ||--|| EMPLOYEE : "optional link"
+    CUSTOMER ||--o{ NOTIFICATION : receives
+    USER ||--o{ AUDITLOG : performs
+    USER ||--o{ SESSION : creates
+    CUSTOMER ||--o{ CREDITSCORE : "has"
+    CUSTOMER ||--o{ FILESTORAGE : uploads
+    CUSTOMER ||--o{ SUPPORTTICKET : creates
+    CUSTOMER ||--o{ FEEDBACK : submits
+    BRANCH ||--o{ ACCOUNT : contains
+    BRANCH ||--|| EMPLOYEE : manages
+    ACCOUNT ||--o{ SCHEDULEDTRANSACTION : schedules
+    CUSTOMER ||--o{ DEVICE : registers
+    ACCOUNT ||--o{ CARD : links

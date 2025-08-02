@@ -1,0 +1,1730 @@
+openapi: 3.0.3
+info:
+  title: Multi-Platform Banking System API
+  description: Full API specification for the multi-platform banking system, covering authentication, account management, transactions, loans, roles, reports, analytics, and admin operations.
+  version: 1.0.0
+
+servers:
+  - url: /api/v1
+    description: Base URL for version 1 of the API
+
+tags:
+  - name: Auth
+    description: Endpoints for authentication and authorization
+  - name: Account
+    description: Customer and staff account management
+  - name: Transaction
+    description: Fund transfer and transaction management
+  - name: Loan
+    description: Loan applications and approvals
+  - name: Branch
+    description: Branch operations
+  - name: Role
+    description: User role and permission management
+  - name: Report
+    description: Generate various reports
+  - name: Admin
+    description: Administrative operations
+  - name: Customer
+    description: Customer management
+  - name: Teller
+    description: Teller management
+  - name: Analytics
+    description: AI and system analytics
+  - name: Security
+    description: Security and system management
+  - name: Chatbot
+    description: AI Chatbot support
+  - name: Feedback
+    description: Customer feedback management
+  - name: Schedule
+    description: Scheduled transactions
+
+paths:
+  # -- Authentication & User Management --
+  /auth/register:
+    post:
+      tags: [Auth]
+      summary: Register a new customer.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, email, password, fullName]
+              properties:
+                username:
+                  type: string
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+                  format: password
+                fullName:
+                  type: string
+      responses:
+        '201':
+          description: User registered successfully.
+        '400':
+          description: Validation errors.
+
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Authenticate user and return JWT token.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+                  format: password
+      responses:
+        '200':
+          description: Authentication successful.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token:
+                    type: string
+                  expiresIn:
+                    type: integer
+                    description: Expiration time in seconds
+        '401':
+          description: Invalid credentials.
+
+  /auth/logout:
+    post:
+      tags: [Auth]
+      summary: Logout user and invalidate current JWT.
+      responses:
+        '200':
+          description: Successfully logged out.
+
+  /auth/change-password:
+    post:
+      tags: [Auth]
+      summary: Change password for logged-in user.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [oldPassword, newPassword]
+              properties:
+                oldPassword:
+                  type: string
+                  format: password
+                newPassword:
+                  type: string
+                  format: password
+      responses:
+        '200':
+          description: Password changed successfully.
+        '400':
+          description: Old password incorrect or validation failed.
+
+  /auth/forgot-password:
+    post:
+      tags: [Auth]
+      summary: Initiate password reset via email.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email:
+                  type: string
+                  format: email
+      responses:
+        '200':
+          description: Password reset link sent.
+
+  /auth/reset-password:
+    post:
+      tags: [Auth]
+      summary: Complete password reset with token.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [resetToken, newPassword]
+              properties:
+                resetToken:
+                  type: string
+                newPassword:
+                  type: string
+                  format: password
+      responses:
+        '200':
+          description: Password reset successful.
+        '400':
+          description: Invalid or expired token.
+
+  # -- Profile Management --
+  /users/me:
+    get:
+      tags: [Auth]
+      summary: Get current logged-in user's profile.
+      responses:
+        '200':
+          description: User profile.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomerResponse'
+    put:
+      tags: [Auth]
+      summary: Update current user's profile.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CustomerUpdateRequest'
+      responses:
+        '200':
+          description: Profile updated.
+        '400':
+          description: Validation error.
+
+  # -- Branch Management --
+  /branches:
+    get:
+      tags: [Branch]
+      summary: List all branches.
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        '200':
+          description: List of branches.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/BranchResponse'
+    post:
+      tags: [Branch]
+      summary: Create a new branch.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BranchRequest'
+      responses:
+        '201':
+          description: Branch created.
+        '400':
+          description: Validation errors.
+
+  /branches/{id}:
+    get:
+      tags: [Branch]
+      summary: Get branch details by ID.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Branch details.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BranchResponse'
+        '404':
+          description: Branch not found.
+    put:
+      tags: [Branch]
+      summary: Update branch information.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BranchRequest'
+      responses:
+        '200':
+          description: Branch updated.
+        '404':
+          description: Branch not found.
+    delete:
+      tags: [Admin]
+      summary: Delete a branch.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Branch deleted.
+        '404':
+          description: Branch not found.
+
+  # -- Account Management --
+  /accounts:
+    get:
+      tags: [Account]
+      summary: List all accounts.
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          schema:
+            type: integer
+        - name: accountType
+          in: query
+          schema:
+            type: string
+        - name: status
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of accounts.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AccountSummary'
+    post:
+      tags: [Account]
+      summary: Open a new account.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [customerId, accountType, initialDeposit]
+              properties:
+                customerId:
+                  type: string
+                  format: uuid
+                accountType:
+                  type: string
+                initialDeposit:
+                  type: number
+      responses:
+        '201':
+          description: Account opened.
+        '400':
+          description: Validation errors.
+
+  /accounts/{id}:
+    get:
+      tags: [Account]
+      summary: View account details.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Account details.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountSummary'
+        '404':
+          description: Account not found.
+    put:
+      tags: [Account]
+      summary: Update account info.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                accountType:
+                  type: string
+      responses:
+        '200':
+          description: Account updated.
+        '404':
+          description: Account not found.
+    delete:
+      tags: [Account]
+      summary: Close account.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Account closed.
+        '404':
+          description: Account not found.
+
+  /accounts/my:
+    get:
+      tags: [Account]
+      summary: List accounts owned by logged-in customer.
+      responses:
+        '200':
+          description: List of accounts.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AccountSummary'
+
+  # -- Transactions --
+  /transactions/deposit:
+    post:
+      tags: [Transaction]
+      summary: Deposit money into an account.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [accountId, amount]
+              properties:
+                accountId:
+                  type: string
+                  format: uuid
+                amount:
+                  type: number
+      responses:
+        '201':
+          description: Deposit successful.
+        '400':
+          description: Validation error.
+
+  /transactions/withdraw:
+    post:
+      tags: [Transaction]
+      summary: Withdraw money from an account.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [accountId, amount]
+              properties:
+                accountId:
+                  type: string
+                  format: uuid
+                amount:
+                  type: number
+      responses:
+        '201':
+          description: Withdrawal successful.
+        '400':
+          description: Insufficient funds or validation error.
+
+  /transactions/transfer:
+    post:
+      tags: [Transaction]
+      summary: Transfer funds between accounts.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [fromAccountId, toAccountId, amount]
+              properties:
+                fromAccountId:
+                  type: string
+                  format: uuid
+                toAccountId:
+                  type: string
+                  format: uuid
+                amount:
+                  type: number
+      responses:
+        '201':
+          description: Transfer successful.
+        '400':
+          description: Validation error or insufficient funds.
+
+  /transactions:
+    get:
+      tags: [Transaction]
+      summary: List all transactions.
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          schema:
+            type: integer
+        - name: accountId
+          in: query
+          schema:
+            type: string
+        - name: dateFrom
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: dateTo
+          in: query
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: List of transactions.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TransactionResponse'
+
+  /transactions/my:
+    get:
+      tags: [Transaction]
+      summary: View logged-in user's transactions.
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: List of user’s transactions.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TransactionResponse'
+
+  /transactions/{id}:
+    get:
+      tags: [Transaction]
+      summary: Get transaction details.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Transaction info.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransactionResponse'
+        '404':
+          description: Transaction not found.
+
+  # -- Reports --
+  /reports/daily-summary:
+    get:
+      tags: [Report]
+      summary: Get daily transaction summary.
+      parameters:
+        - name: date
+          in: query
+          schema:
+            type: string
+            format: date
+          description: Date for summary (defaults to today)
+      responses:
+        '200':
+          description: Summary data.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReportResponse'
+
+  /reports/account/{id}:
+    get:
+      tags: [Report]
+      summary: Get report for specific account.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Account report.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountReportResponse'
+
+  /reports/customer/{id}:
+    get:
+      tags: [Report]
+      summary: Get report for specific customer.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Customer report.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomerReportResponse'
+
+  # -- Customer Management --
+  /customers:
+    get:
+      tags: [Customer]
+      summary: List all customers.
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: List of customers.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CustomerResponse'
+
+  /customers/{id}:
+    get:
+      tags: [Customer]
+      summary: View customer profile.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Customer info.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomerResponse'
+
+    put:
+      tags: [Customer]
+      summary: Update customer profile.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CustomerUpdateRequest'
+      responses:
+        '200':
+          description: Profile updated.
+
+    delete:
+      tags: [Admin]
+      summary: Delete customer.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Customer deleted.
+
+  # -- Teller Management --
+  /tellers:
+    get:
+      tags: [Teller]
+      summary: List all tellers.
+      responses:
+        '200':
+          description: List of tellers.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TellerResponse'
+    post:
+      tags: [Teller]
+      summary: Create new teller.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TellerCreateRequest'
+      responses:
+        '201':
+          description: Teller created.
+
+  /tellers/{id}:
+    get:
+      tags: [Teller]
+      summary: View teller info.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Teller info.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TellerResponse'
+    put:
+      tags: [Teller]
+      summary: Update teller details.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TellerUpdateRequest'
+      responses:
+        '200':
+          description: Teller updated.
+    delete:
+      tags: [Teller]
+      summary: Remove teller.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Teller removed.
+
+  # -- Loan Management --
+  /loans/apply:
+    post:
+      tags: [Loan]
+      summary: Apply for a loan.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [amount, loanType, termMonths, purpose]
+              properties:
+                amount:
+                  type: number
+                loanType:
+                  type: string
+                termMonths:
+                  type: integer
+                purpose:
+                  type: string
+      responses:
+        '201':
+          description: Loan application submitted.
+        '400':
+          description: Validation error.
+
+  /loans/my:
+    get:
+      tags: [Loan]
+      summary: List logged-in user's loans.
+      responses:
+        '200':
+          description: Loans list.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/LoanResponse'
+
+  /loans/{id}:
+    get:
+      tags: [Loan]
+      summary: View loan details.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Loan details.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoanResponse'
+
+    put:
+      tags: [Admin]
+      summary: Update loan status (approve/reject).
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                status:
+                  type: string
+                  enum: [pending, approved, rejected]
+                comments:
+                  type: string
+      responses:
+        '200':
+          description: Loan status updated.
+
+  # -- Role and Access Management --
+  /roles:
+    get:
+      tags: [Role]
+      summary: List all roles.
+      responses:
+        '200':
+          description: List of roles.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RoleResponse'
+    post:
+      tags: [Role]
+      summary: Create new role.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RoleCreateRequest'
+      responses:
+        '201':
+          description: Role created.
+
+  /roles/{id}:
+    get:
+      tags: [Role]
+      summary: View role details.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Role info.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoleResponse'
+    put:
+      tags: [Role]
+      summary: Update role.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RoleUpdateRequest'
+      responses:
+        '200':
+          description: Role updated.
+    delete:
+      tags: [Admin]
+      summary: Delete role.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Role deleted.
+
+  /access-control:
+    get:
+      tags: [Role]
+      summary: Get current access control rules.
+      responses:
+        '200':
+          description: Access control rules.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccessControlResponse'
+    put:
+      tags: [Role]
+      summary: Update access control rules.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AccessControlUpdateRequest'
+      responses:
+        '200':
+          description: Access control updated.
+
+  # -- Analytics --
+  /analytics/fraud-flags:
+    get:
+      tags: [Analytics]
+      summary: List flagged fraud cases.
+      responses:
+        '200':
+          description: Fraud flags.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/FraudFlagResponse'
+
+  /analytics/credit-score/{customerId}:
+    get:
+      tags: [Analytics]
+      summary: Get credit score for a customer.
+      parameters:
+        - name: customerId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Credit score info.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreditScoreResponse'
+
+  /analytics/loan-risk/{loanId}:
+    get:
+      tags: [Analytics]
+      summary: Get risk analysis for a loan.
+      parameters:
+        - name: loanId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Loan risk info.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoanRiskResponse'
+
+  /analytics/usage-stats:
+    get:
+      tags: [Analytics]
+      summary: Get system usage statistics.
+      responses:
+        '200':
+          description: Usage statistics.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UsageStatsResponse'
+
+  /analytics/personalized:
+    get:
+      tags: [Analytics]
+      summary: Get personalized recommendations for logged-in user.
+      responses:
+        '200':
+          description: Recommendations.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonalizedResponse'
+
+  # -- System Management --
+  /system/logs:
+    get:
+      tags: [Security]
+      summary: Get system log entries.
+      parameters:
+        - name: level
+          in: query
+          schema:
+            type: string
+            enum: [INFO, WARN, ERROR, DEBUG]
+        - name: dateFrom
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: dateTo
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: page
+          in: query
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Logs list.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SystemLogEntry'
+
+  /system/status:
+    get:
+      tags: [Security]
+      summary: Get current system status.
+      responses:
+        '200':
+          description: System status info.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemStatus'
+
+  /system/security-policy:
+    get:
+      tags: [Security]
+      summary: Get current security policy.
+      responses:
+        '200':
+          description: Security policy.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SecurityPolicy'
+    put:
+      tags: [Security]
+      summary: Update security policy.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SecurityPolicyUpdateRequest'
+      responses:
+        '200':
+          description: Security policy updated.
+
+  # -- Chatbot --
+  /chatbot/message:
+    post:
+      tags: [Chatbot]
+      summary: Send a message to AI Chatbot.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [message]
+              properties:
+                message:
+                  type: string
+      responses:
+        '200':
+          description: Chatbot response.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  reply:
+                    type: string
+
+  # -- Feedback --
+  /feedback:
+    post:
+      tags: [Feedback]
+      summary: Submit feedback or report issue.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [subject, message]
+              properties:
+                subject:
+                  type: string
+                message:
+                  type: string
+                email:
+                  type: string
+                  format: email
+      responses:
+        '201':
+          description: Feedback submitted.
+
+  # -- Scheduled Transactions --
+  /schedules:
+    get:
+      tags: [Schedule]
+      summary: List scheduled transactions.
+      responses:
+        '200':
+          description: Scheduled transactions list.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ScheduledTransactionResponse'
+    post:
+      tags: [Schedule]
+      summary: Create a scheduled transaction.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ScheduledTransactionRequest'
+      responses:
+        '201':
+          description: Scheduled transaction created.
+
+  /schedules/{id}:
+    get:
+      tags: [Schedule]
+      summary: Get scheduled transaction details.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Scheduled transaction details.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScheduledTransactionResponse'
+        '404':
+          description: Not found.
+    put:
+      tags: [Schedule]
+      summary: Update scheduled transaction.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ScheduledTransactionRequest'
+      responses:
+        '200':
+          description: Updated.
+    delete:
+      tags: [Schedule]
+      summary: Cancel scheduled transaction.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Cancelled.
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    # Basic reusable schemas used in paths and components
+    ReportResponse:
+      type: object
+      properties:
+        reportType:
+          type: string
+        generatedAt:
+          type: string
+          format: date-time
+        data:
+          type: object
+
+    AccountSummary:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        accountType:
+          type: string
+        balance:
+          type: number
+        status:
+          type: string
+
+    TransactionResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        accountId:
+          type: string
+          format: uuid
+        type:
+          type: string
+          description: Deposit, withdrawal, transfer
+        amount:
+          type: number
+        timestamp:
+          type: string
+          format: date-time
+        description:
+          type: string
+
+    LoanResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        amount:
+          type: number
+        loanType:
+          type: string
+        termMonths:
+          type: integer
+        status:
+          type: string
+        comments:
+          type: string
+
+    BranchResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        address:
+          type: string
+        contactNumber:
+          type: string
+
+    BranchRequest:
+      type: object
+      required:
+        - name
+        - address
+        - contactNumber
+      properties:
+        name:
+          type: string
+        address:
+          type: string
+        contactNumber:
+          type: string
+
+    ScheduledTransactionRequest:
+      type: object
+      required:
+        - fromAccountId
+        - toAccountId
+        - amount
+        - scheduleDate
+      properties:
+        fromAccountId:
+          type: string
+          format: uuid
+        toAccountId:
+          type: string
+          format: uuid
+        amount:
+          type: number
+        scheduleDate:
+          type: string
+          format: date-time
+        description:
+          type: string
+
+    ScheduledTransactionResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        fromAccountId:
+          type: string
+          format: uuid
+        toAccountId:
+          type: string
+          format: uuid
+        amount:
+          type: number
+        scheduleDate:
+          type: string
+          format: date-time
+        description:
+          type: string
+        status:
+          type: string
+
+    # Report Responses
+    AccountReportResponse:
+      type: object
+      properties:
+        accountId:
+          type: string
+          format: uuid
+        accountType:
+          type: string
+        balance:
+          type: number
+        transactions:
+          type: array
+          items:
+            $ref: '#/components/schemas/TransactionResponse'
+
+    CustomerReportResponse:
+      type: object
+      properties:
+        customerId:
+          type: string
+          format: uuid
+        fullName:
+          type: string
+        accounts:
+          type: array
+          items:
+            $ref: '#/components/schemas/AccountSummary'
+        loans:
+          type: array
+          items:
+            $ref: '#/components/schemas/LoanResponse'
+
+    # Customer schemas
+    CustomerResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        username:
+          type: string
+        fullName:
+          type: string
+        email:
+          type: string
+          format: email
+        phoneNumber:
+          type: string
+        address:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        roles:
+          type: array
+          items:
+            type: string
+
+    CustomerUpdateRequest:
+      type: object
+      properties:
+        fullName:
+          type: string
+        email:
+          type: string
+          format: email
+        phoneNumber:
+          type: string
+        address:
+          type: string
+
+    # Teller schemas
+    TellerResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        username:
+          type: string
+        fullName:
+          type: string
+        email:
+          type: string
+          format: email
+        roles:
+          type: array
+          items:
+            type: string
+        createdAt:
+          type: string
+          format: date-time
+
+    TellerCreateRequest:
+      type: object
+      required:
+        - username
+        - email
+        - password
+        - fullName
+      properties:
+        username:
+          type: string
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          format: password
+        fullName:
+          type: string
+
+    TellerUpdateRequest:
+      type: object
+      properties:
+        fullName:
+          type: string
+        email:
+          type: string
+          format: email
+        roles:
+          type: array
+          items:
+            type: string
+
+    # Analytics schemas
+    FraudFlagResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        flaggedAt:
+          type: string
+          format: date-time
+        description:
+          type: string
+        severity:
+          type: string
+          enum:
+            - low
+            - medium
+            - high
+
+    CreditScoreResponse:
+      type: object
+      properties:
+        customerId:
+          type: string
+          format: uuid
+        creditScore:
+          type: number
+          minimum: 0
+          maximum: 850
+        lastUpdated:
+          type: string
+          format: date-time
+
+    LoanRiskResponse:
+      type: object
+      properties:
+        loanId:
+          type: string
+          format: uuid
+        riskLevel:
+          type: string
+          enum:
+            - low
+            - medium
+            - high
+        explanation:
+          type: string
+
+    UsageStatsResponse:
+      type: object
+      properties:
+        activeUsers:
+          type: integer
+        transactionsProcessed:
+          type: integer
+        systemLoad:
+          type: number
+        timestamp:
+          type: string
+          format: date-time
+
+    PersonalizedResponse:
+      type: object
+      properties:
+        customerId:
+          type: string
+          format: uuid
+        recommendations:
+          type: array
+          items:
+            type: string
+
+    # Role & Access schemas
+    RoleResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        permissions:
+          type: array
+          items:
+            type: string
+        createdAt:
+          type: string
+          format: date-time
+
+    RoleCreateRequest:
+      type: object
+      required:
+        - name
+        - permissions
+      properties:
+        name:
+          type: string
+        permissions:
+          type: array
+          items:
+            type: string
+
+    RoleUpdateRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        permissions:
+          type: array
+          items:
+            type: string
+
+    AccessControlResponse:
+      type: object
+      properties:
+        rules:
+          type: array
+          items:
+            type: object
+            properties:
+              role:
+                type: string
+              resource:
+                type: string
+              permissions:
+                type: array
+                items:
+                  type: string
+
+    AccessControlUpdateRequest:
+      type: object
+      properties:
+        rules:
+          type: array
+          items:
+            type: object
+            required:
+              - role
+              - resource
+              - permissions
+            properties:
+              role:
+                type: string
+              resource:
+                type: string
+              permissions:
+                type: array
+                items:
+                  type: string
+
+    # System Management schemas
+    SystemLogEntry:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        timestamp:
+          type: string
+          format: date-time
+        level:
+          type: string
+          enum:
+            - INFO
+            - WARN
+            - ERROR
+            - DEBUG
+        message:
+          type: string
+        source:
+          type: string
+
+    SystemStatus:
+      type: object
+      properties:
+        uptime:
+          type: string
+        databaseStatus:
+          type: string
+        apiStatus:
+          type: string
+        lastChecked:
+          type: string
+          format: date-time
+
+    SecurityPolicy:
+      type: object
+      properties:
+        passwordPolicy:
+          type: object
+          properties:
+            minLength:
+              type: integer
+            requireNumbers:
+              type: boolean
+            requireSpecialChars:
+              type: boolean
+        sessionTimeoutMinutes:
+          type: integer
+        allowedIPs:
+          type: array
+          items:
+            type: string
+
+    SecurityPolicyUpdateRequest:
+      type: object
+      properties:
+        passwordPolicy:
+          type: object
+          properties:
+            minLength:
+              type: integer
+            requireNumbers:
+              type: boolean
+            requireSpecialChars:
+              type: boolean
+        sessionTimeoutMinutes:
+          type: integer
+        allowedIPs:
+          type: array
+          items:
+            type: string
