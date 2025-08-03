@@ -1,5 +1,6 @@
 package com.bankingsystem.core.entity;
 
+import com.fasterxml.jackson.annotation.JsonManagedReference;
 import jakarta.persistence.*;
 import java.time.LocalDateTime;
 import java.util.UUID;
@@ -39,9 +40,11 @@ public class User {
     @JoinColumn(name = "customer_id")
     private Customer customer;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "employee_id")
+    @OneToOne(fetch = FetchType.EAGER)
+    @JoinColumn(name = "employee_id", nullable = true)
+    @JsonManagedReference
     private Employee employee;
+
 
     @Column(name = "is_active", nullable = false)
     private Boolean isActive;

@@ -30,7 +30,7 @@ public class EmailServiceImpl implements EmailService {
         mailMessage.setTo(toEmail);
         mailMessage.setSubject(subject);
         mailMessage.setText(body);
-        mailMessage.setFrom(appProperties.getBaseUrl());
+        mailMessage.setFrom("no-reply@yourdomain.com");
 
         mailSender.send(mailMessage);
     }

@@ -46,7 +46,12 @@ public class Customer {
     @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
 
-    // Getters and Setters
+    // NEW: Link to User entity for authentication mapping
+    @OneToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_id", unique = true)
+    private User user;
+
+    // Getters and setters
 
     public UUID getCustomerId() {
         return customerId;
@@ -134,6 +139,14 @@ public class Customer {
 
     public void setUpdatedAt(LocalDateTime updatedAt) {
         this.updatedAt = updatedAt;
+    }
+
+    public User getUser() {
+        return user;
+    }
+
+    public void setUser(User user) {
+        this.user = user;
     }
 
     public enum Gender {

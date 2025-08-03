@@ -2,6 +2,7 @@
 package com.bankingsystem.core.config;
 
 import com.bankingsystem.core.entity.Role;
+import com.bankingsystem.core.enums.Roles;
 import com.bankingsystem.core.repository.RoleRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.boot.CommandLineRunner;
@@ -17,11 +18,11 @@ public class RoleSeeder implements CommandLineRunner {
 
     @Override
     public void run(String... args) {
-        createRoleIfNotExists("ADMIN");
-        createRoleIfNotExists("EMPLOYEE");
-        createRoleIfNotExists("MANAGER");
-        createRoleIfNotExists("TELLER");
-        createRoleIfNotExists("CUSTOMER");
+        createRoleIfNotExists(Roles.ADMIN.name());
+        createRoleIfNotExists(Roles.EMPLOYEE.name());
+        createRoleIfNotExists(Roles.MANAGER.name());
+        createRoleIfNotExists(Roles.TELLER.name());
+        createRoleIfNotExists(Roles.CUSTOMER.name());
     }
 
     private void createRoleIfNotExists(String roleName) {

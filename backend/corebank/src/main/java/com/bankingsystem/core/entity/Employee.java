@@ -1,6 +1,11 @@
 package com.bankingsystem.core.entity;
 
+import com.fasterxml.jackson.annotation.JsonBackReference;
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.persistence.*;
+import lombok.Builder;
+
 import java.time.LocalDateTime;
 import java.util.UUID;
 
@@ -27,7 +32,6 @@ public class Employee {
     @Column(name = "phone", nullable = false, length = 20)
     private String phone;
 
-    // Assuming Role is another entity with Integer ID
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "role_id", nullable = false)
     private Role role;
@@ -35,7 +39,6 @@ public class Employee {
     @Column(name = "department", length = 100)
     private String department;
 
-    // Self-referencing manager relationship, nullable
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "manager_id")
     private Employee manager;
@@ -47,7 +50,13 @@ public class Employee {
     @Column(name = "status", nullable = false, length = 10)
     private Status status;
 
-    // Getters and setters
+    @Column(name = "resignation_date")
+    private LocalDateTime resignationDate;
+
+    @OneToOne(mappedBy = "employee")
+    @JsonBackReference
+    private User user;
+
 
     public UUID getEmployeeId() {
         return employeeId;
@@ -129,7 +138,23 @@ public class Employee {
         this.status = status;
     }
 
-    // Enum for Status
+    public LocalDateTime getResignationDate() {
+        return resignationDate;
+    }
+
+    public Employee setResignationDate(LocalDateTime resignationDate) {
+        this.resignationDate = resignationDate;
+        return this;
+    }
+
+    public User getUser() {
+        return user;
+    }
+
+    public Employee setUser(User user) {
+        this.user = user;
+        return this;
+    }
 
     public enum Status {
         ACTIVE,

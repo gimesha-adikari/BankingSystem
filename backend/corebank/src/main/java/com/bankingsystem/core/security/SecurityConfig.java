@@ -36,11 +36,15 @@ public class SecurityConfig {
                                 "/api/v1/auth/verify-email",
                                 "/api/v1/auth/forgot-password",
                                 "/api/v1/auth/reset-password",
-                                "/api/v1/users/me/email/verify").permitAll()
-                        .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")   // only ADMIN can access /admin/**
-                        .requestMatchers("/api/v1/customer/**").hasRole("CUSTOMER") // only CUSTOMER can access /customer/**
+                                "/api/v1/users/me/email/verify",
+                                "/error").permitAll()
+                        .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
+                        .requestMatchers("/api/v1/customer/**").hasRole("CUSTOMER")
                         .requestMatchers("/api/v1/auth/change-password").authenticated()
                         .anyRequest().authenticated()
+                )
+                .exceptionHandling(e -> e
+                        .accessDeniedPage("/error")
                 )
 
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))

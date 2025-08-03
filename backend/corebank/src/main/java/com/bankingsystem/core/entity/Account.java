@@ -1,6 +1,8 @@
 package com.bankingsystem.core.entity;
 
 import jakarta.persistence.*;
+import org.hibernate.annotations.GenericGenerator;
+
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.UUID;
@@ -12,8 +14,12 @@ import java.util.UUID;
 public class Account {
 
     @Id
-    @GeneratedValue
-    @Column(name = "account_id", columnDefinition = "BINARY(16)")
+    @GeneratedValue(generator = "UUID")
+    @GenericGenerator(
+            name = "UUID",
+            strategy = "org.hibernate.id.UUIDGenerator"
+    )
+    @Column(name = "account_id", updatable = false, nullable = false, columnDefinition = "BINARY(16)")
     private UUID accountId;
 
     @Column(name = "account_number", nullable = false, unique = true, length = 50)
@@ -46,7 +52,7 @@ public class Account {
     @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
 
-    // Getters and setters
+    // Getters and setters...
 
     public UUID getAccountId() {
         return accountId;
@@ -119,8 +125,6 @@ public class Account {
     public void setUpdatedAt(LocalDateTime updatedAt) {
         this.updatedAt = updatedAt;
     }
-
-    // Enums for AccountType and AccountStatus
 
     public enum AccountType {
         SAVINGS,
