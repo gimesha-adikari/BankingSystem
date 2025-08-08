@@ -129,7 +129,6 @@ public class Account {
     public enum AccountType {
         SAVINGS,
         CHECKING,
-        // add more as needed
     }
 
     public enum AccountStatus {

@@ -1,20 +1,21 @@
 package com.bankingsystem.core.controller;
 
-import com.bankingsystem.core.dto.ChangePasswordRequest;
-import com.bankingsystem.core.dto.EmailChangeRequest;
-import com.bankingsystem.core.dto.UpdateProfileRequest;
-import com.bankingsystem.core.dto.UserProfileResponse;
+import com.bankingsystem.core.dto.*;
 import com.bankingsystem.core.entity.User;
+import com.bankingsystem.core.repository.UserRepository;
 import com.bankingsystem.core.service.AuthService;
 import com.bankingsystem.core.service.UserService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 
 import java.security.Principal;
+import java.util.List;
 import java.util.UUID;
 
 @RestController
@@ -24,6 +25,17 @@ public class UserController {
 
     private final UserService userService;
     private final AuthService authService;
+    private final UserRepository userRepository;
+    private final PasswordEncoder passwordEncoder;
+
+
+    @GetMapping("/all")
+    @PreAuthorize("hasAnyRole('ADMIN', 'TELLER','MANAGER')")
+    public ResponseEntity<List<UserProfileResponse>> listAllUsers() {
+        List<UserProfileResponse> users = userService.getAllUsers();
+        return ResponseEntity.ok(users);
+    }
+
 
     @GetMapping("/me")
     @PreAuthorize("isAuthenticated()")
@@ -38,11 +50,18 @@ public class UserController {
         return ResponseEntity.ok().build();
     }
 
-    @PutMapping("/me/password")
-    @PreAuthorize("isAuthenticated()")
-    public ResponseEntity<?> updatePassword(@RequestBody ChangePasswordRequest request, Principal principal) {
-        authService.changePassword(principal.getName(), request);
-        return ResponseEntity.ok("Password updated successfully");
+    @PostMapping("/verify-password")
+    public ResponseEntity<?> verifyPassword(@RequestBody PasswordVerifyRequest request, Authentication authentication) {
+        String username = authentication.getName();
+        User user = userRepository.findByUsername(username)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        boolean matches = passwordEncoder.matches(request.getPassword(), user.getPasswordHash());
+        if (matches) {
+            return ResponseEntity.ok(true);
+        } else {
+            return ResponseEntity.status(401).body("Invalid password");
+        }
     }
 
     @PutMapping("/me/email")

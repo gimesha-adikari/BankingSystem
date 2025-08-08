@@ -5,6 +5,7 @@ import com.bankingsystem.core.entity.PasswordResetToken;
 import com.bankingsystem.core.entity.User;
 import com.bankingsystem.core.repository.PasswordResetTokenRepository;
 import com.bankingsystem.core.repository.UserRepository;
+import com.bankingsystem.core.service.AuthService;
 import com.bankingsystem.core.service.EmailService;
 import com.bankingsystem.core.service.PasswordResetService;
 import lombok.RequiredArgsConstructor;
@@ -25,6 +26,7 @@ public class PasswordResetServiceImpl implements PasswordResetService {
     private final EmailService emailService;
     private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
     private final AppProperties appProperties;
+    private final AuthService authService;
 
     @Override
     public void initiateReset(String email) {
@@ -42,7 +44,7 @@ public class PasswordResetServiceImpl implements PasswordResetService {
         prt.setExpiryDate(expiry);
         tokenRepo.save(prt);
 
-        String resetLink = appProperties.getBaseUrl()+"/api/v1/auth/reset-password?token=" + token;
+        String resetLink = appProperties.getFrontendUrl()+"/reset-password?token=" + token;
         emailService.sendEmail(user.getEmail(), "Reset Password", "Reset link: " + resetLink);
     }
 
@@ -54,6 +56,8 @@ public class PasswordResetServiceImpl implements PasswordResetService {
         if (prt.isUsed() || prt.getExpiryDate().isBefore(LocalDateTime.now())) {
             throw new RuntimeException("Token expired or used");
         }
+
+        authService.validatePasswordStrength( newPassword);
 
         User user = prt.getUser();
         user.setPasswordHash(passwordEncoder.encode(newPassword));

@@ -12,6 +12,7 @@ import org.springframework.stereotype.Component;
 public class AppProperties {
 
     private String baseUrl;
+    private String frontendUrl;
     private Token token;
     private DefaultAdmin defaultAdmin;
     private DefaultCustomer defaultCustomer;

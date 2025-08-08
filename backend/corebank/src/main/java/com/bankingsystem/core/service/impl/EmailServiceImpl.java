@@ -36,7 +36,7 @@ public class EmailServiceImpl implements EmailService {
     }
 
     public void sendEmailChangeVerification(String to, String token) {
-        String verificationUrl = appProperties.getBaseUrl()+"/api/v1/users/me/email/verify?token=" + token;
+        String verificationUrl = appProperties.getFrontendUrl()+"/api/v1/users/me/email/verify?token=" + token;
         String subject = "Verify your new email address";
         String body = "Click the following link to confirm your email change: " + verificationUrl;
 

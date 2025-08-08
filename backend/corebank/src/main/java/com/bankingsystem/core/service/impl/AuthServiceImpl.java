@@ -39,6 +39,10 @@ public class AuthServiceImpl implements AuthService {
 
     private static final String EMAIL_REGEX = "^[A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+$";
     private static final Pattern EMAIL_PATTERN = Pattern.compile(EMAIL_REGEX);
+    private static final int MIN_PASSWORD_LENGTH = 8;
+    private static final Pattern PASSWORD_SPECIAL = Pattern.compile("[!@#$%^&*(),.?\":{}|<>]");
+    private static final Pattern PASSWORD_NUMBER = Pattern.compile("[0-9]");
+    private static final Pattern PASSWORD_UPPERCASE = Pattern.compile("[A-Z]");
 
     @Override
     @Transactional
@@ -46,6 +50,8 @@ public class AuthServiceImpl implements AuthService {
         if (!EMAIL_PATTERN.matcher(request.getEmail()).matches()) {
             throw new IllegalArgumentException("Invalid email format");
         }
+
+        validatePasswordStrength(request.getPassword());
 
         if (userRepository.existsByUsername(request.getUsername())) {
             throw new IllegalArgumentException("Username is already taken");
@@ -55,6 +61,8 @@ public class AuthServiceImpl implements AuthService {
             throw new IllegalArgumentException("Email is already in use");
         }
 
+        
+        
         Role defaultRole = roleRepository.findByRoleName("CUSTOMER")
                 .orElseThrow(() -> new IllegalStateException("Default role not found"));
 
@@ -88,7 +96,6 @@ public class AuthServiceImpl implements AuthService {
 
         tokenRepository.save(verificationToken);
 
-        // Send verification email
         emailService.sendVerificationEmail(user.getEmail(), token);
     }
 
@@ -141,6 +148,21 @@ public class AuthServiceImpl implements AuthService {
         }
     }
 
+    public void validatePasswordStrength(String password) {
+        if (password.length() < MIN_PASSWORD_LENGTH) {
+            throw new IllegalArgumentException("Password must be at least " + MIN_PASSWORD_LENGTH + " characters long");
+        }
+        if (!PASSWORD_SPECIAL.matcher(password).find()) {
+            throw new IllegalArgumentException("Password must contain at least one special character");
+        }
+        if (!PASSWORD_NUMBER.matcher(password).find()) {
+            throw new IllegalArgumentException("Password must contain at least one number");
+        }
+        if (!PASSWORD_UPPERCASE.matcher(password).find()) {
+            throw new IllegalArgumentException("Password must contain at least one uppercase letter");
+        }
+    }
+
     @Override
     public void changePassword(String username, ChangePasswordRequest request) {
         User user = userRepository.findByUsername(username)
@@ -153,6 +175,8 @@ public class AuthServiceImpl implements AuthService {
         if (request.getNewPassword().equals(request.getCurrentPassword())) {
             throw new IllegalArgumentException("New password cannot be the same as the current password");
         }
+
+        validatePasswordStrength(request.getNewPassword());
 
         if (!request.getNewPassword().equals(request.getConfirmNewPassword())) {
             throw new IllegalArgumentException("New password and confirm password do not match");

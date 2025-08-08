@@ -4,6 +4,14 @@
   <component name="GradleSettings">
     <option name="linkedExternalProjectsSettings">
       <GradleProjectSettings>
+        <option name="externalProjectPath" value="//wsl$/Ubuntu/home/gimesha/My_Projects/multi-lng/multi-platform-banking-system/descktop-app/desk_app" />
+        <option name="modules">
+          <set>
+            <option value="$PROJECT_DIR$/descktop-app/desk_app" />
+          </set>
+        </option>
+      </GradleProjectSettings>
+      <GradleProjectSettings>
         <option name="externalProjectPath" value="$PROJECT_DIR$/backend/corebank" />
         <option name="modules">
           <set>

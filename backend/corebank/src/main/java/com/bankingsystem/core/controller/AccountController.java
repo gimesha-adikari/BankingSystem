@@ -25,7 +25,7 @@ public class AccountController {
     }
 
     @PostMapping
-    @PreAuthorize("hasAnyRole('CUSTOMER'")
+    @PreAuthorize("hasAnyRole('CUSTOMER')")
     public ResponseEntity<AccountResponseDTO> openAccount(@RequestBody AccountRequestDTO request) {
         return ResponseEntity.status(201).body(accountService.openAccount(request,null));
     }
