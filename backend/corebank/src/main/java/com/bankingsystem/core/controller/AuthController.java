@@ -171,6 +171,7 @@ public class AuthController {
     }
 
     @GetMapping("/validate-token")
+    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<?> validateToken(@RequestHeader("Authorization") String authHeader) {
         String token = authHeader.replace("Bearer ", "");
 

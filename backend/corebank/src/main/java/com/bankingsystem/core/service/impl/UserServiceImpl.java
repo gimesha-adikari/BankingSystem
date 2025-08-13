@@ -70,7 +70,7 @@ public class UserServiceImpl implements UserService {
         User user = getCurrentUser();
 
         if (request.getUsername() != null && !request.getUsername().isBlank()) {
-            if (userRepository.existsByUsername(request.getUsername()) && !request.getUsername().equals(user.getUsername())) {
+            if (userRepository.existsByUsernameIgnoreCase(request.getUsername()) && !request.getUsername().equals(user.getUsername())) {
                 throw new ConflictException("Username is already taken");
             }
             user.setUsername(request.getUsername());
@@ -152,31 +152,40 @@ public class UserServiceImpl implements UserService {
         return getCurrentUser().getUserId();
     }
 
-    @Override
-    public List<UserProfileResponse> getAllUsers() {
-        return userRepository.findAll().stream()
-                .filter(user -> "CUSTOMER".equals(user.getRole().getRoleName()))
-                .map(user -> {
-                    UserProfileResponse dto = new UserProfileResponse();
-                    dto.setUserId(user.getUserId());
-                    dto.setUsername(user.getUsername());
-                    dto.setFirstName(user.getFirstName());
-                    dto.setLastName(user.getLastName());
-                    dto.setEmail(user.getEmail());
-                    dto.setAddress(user.getAddress());
-                    dto.setCity(user.getCity());
-                    dto.setState(user.getState());
-                    dto.setCountry(user.getCountry());
-                    dto.setPostalCode(user.getPostalCode());
-                    dto.setHomeNumber(user.getHomeNumber());
-                    dto.setWorkNumber(user.getWorkNumber());
-                    dto.setOfficeNumber(user.getOfficeNumber());
-                    dto.setMobileNumber(user.getMobileNumber());
-                    dto.setRoleName(user.getRole().getRoleName());
-                    return dto;
-                })
+    public List<UserProfileResponse> getAllUsers(String search) {
+        List<User> users;
+        if (search == null || search.isBlank()) {
+            users = userRepository.findByRole_RoleName("CUSTOMER");
+        } else {
+            users = userRepository.searchByRoleAndNameOrEmail("CUSTOMER",search.toLowerCase());
+        }
+
+        return users.stream()
+                .map(this::toUserProfileResponse)
                 .collect(Collectors.toList());
     }
+
+
+    private UserProfileResponse toUserProfileResponse(User user) {
+        UserProfileResponse userProfileResponse = new UserProfileResponse();
+        userProfileResponse.setUserId(user.getUserId());
+        userProfileResponse.setUsername(user.getUsername());
+        userProfileResponse.setFirstName(user.getFirstName());
+        userProfileResponse.setLastName(user.getLastName());
+        userProfileResponse.setEmail(user.getEmail());
+        userProfileResponse.setAddress(user.getAddress());
+        userProfileResponse.setCity(user.getCity());
+        userProfileResponse.setState(user.getState());
+        userProfileResponse.setCountry(user.getCountry());
+        userProfileResponse.setPostalCode(user.getPostalCode());
+        userProfileResponse.setHomeNumber(user.getHomeNumber());
+        userProfileResponse.setWorkNumber(user.getWorkNumber());
+        userProfileResponse.setOfficeNumber(user.getOfficeNumber());
+        userProfileResponse.setMobileNumber(user.getMobileNumber());
+        userProfileResponse.setRoleName(user.getRole().getRoleName());
+        return userProfileResponse;
+    }
+
 
 
     @Override

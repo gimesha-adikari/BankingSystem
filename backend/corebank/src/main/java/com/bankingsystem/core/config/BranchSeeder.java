@@ -16,10 +16,9 @@ public class BranchSeeder implements CommandLineRunner {
 
     @Override
     public void run(String... args) {
-        createBranchIfNotExists("Main Branch", "123 Main St, City", "0123456789");
-        createBranchIfNotExists("Downtown Branch", "456 Downtown Ave, City", "0987654321");
-        createBranchIfNotExists("Uptown Branch", "789 Uptown Blvd, City", "0112233445");
-        // Add more branches as needed
+        createBranchIfNotExists("Colombo Branch", "45 York Street, Colombo 01, Sri Lanka", "+94112556789");
+        createBranchIfNotExists("Kandy Branch", "256 Peradeniya Road, Kandy, Sri Lanka", "+94812334567");
+        createBranchIfNotExists("Galle Branch", "78 Main Street, Fort, Galle, Sri Lanka", "+94912245678");
     }
 
     private void createBranchIfNotExists(String branchName, String address, String contactNumber) {

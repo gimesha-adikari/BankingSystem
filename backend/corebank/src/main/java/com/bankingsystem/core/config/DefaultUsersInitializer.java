@@ -50,8 +50,8 @@ public class DefaultUsersInitializer implements CommandLineRunner {
     }
 
     private void createDefaultUserIfNotExists(String roleName, String username, String email, String rawPassword) {
-        if (!userRepository.existsByUsername(username)) {
-            Role role = roleRepository.findByRoleName(roleName)
+        if (!userRepository.existsByUsernameIgnoreCase(username)) {
+            Role role = roleRepository.findByRoleNameIgnoreCase(roleName)
                     .orElseThrow(() -> new RuntimeException(roleName + " role not found"));
 
             User user = new User();

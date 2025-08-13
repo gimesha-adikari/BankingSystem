@@ -1,10 +1,12 @@
 package com.bankingsystem.core.service.impl;
 
+import com.bankingsystem.core.dto.EmployeeResponse;
 import com.bankingsystem.core.dto.RoleUpdateRequest;
 import com.bankingsystem.core.dto.TellerRequest;
 import com.bankingsystem.core.entity.Employee;
 import com.bankingsystem.core.entity.Role;
 import com.bankingsystem.core.entity.User;
+import com.bankingsystem.core.enums.Status;
 import com.bankingsystem.core.exceptions.NotFoundException;
 import com.bankingsystem.core.repository.EmployeeRepository;
 import com.bankingsystem.core.repository.RoleRepository;
@@ -20,6 +22,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -42,14 +45,13 @@ public class EmployeeServiceImpl implements EmployeeService {
 
     @Override
     public void createOrUpdateTeller(TellerRequest request, UUID userId) {
-        RoleUpdateRequest roleUpdateRequest = RoleUpdateRequest.builder()
-                .roleName("TELLER")
-                .firstName(request.getFirstName())
-                .lastName(request.getLastName())
-                .phone(request.getPhone())
-                .department(request.getDepartment())
-                .managerId(request.getManagerId())
-                .build();
+        RoleUpdateRequest roleUpdateRequest = new RoleUpdateRequest();
+        roleUpdateRequest.setRoleName("TELLER");
+        roleUpdateRequest.setFirstName(request.getFirstName());
+        roleUpdateRequest.setLastName(request.getLastName());
+        roleUpdateRequest.setPhone(request.getPhone());
+        roleUpdateRequest.setDepartment(request.getDepartment());
+        roleUpdateRequest.setManagerId(request.getManagerId());
         if (userRepository.findById(userId).get().getRole().getRoleName().equalsIgnoreCase("ADMIN")) {
             throw new IllegalStateException("Admin cannot create or update teller");
         }
@@ -64,17 +66,17 @@ public class EmployeeServiceImpl implements EmployeeService {
         Employee employee = employeeRepository.findByUser_UserId(userId)
                 .orElseThrow(() -> new NotFoundException("Employee not found"));
 
-        if (employee.getStatus() == Employee.Status.INACTIVE) {
+        if (employee.getStatus() == Status.INACTIVE) {
             throw new IllegalStateException("Employee already resigned.");
         }
 
-        employee.setStatus(Employee.Status.INACTIVE);
+        employee.setStatus(Status.INACTIVE);
         employee.setResignationDate(LocalDateTime.now());
         employeeRepository.save(employee);
 
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new NotFoundException("User not found"));
-        Role customerRole = roleRepository.findByRoleName("CUSTOMER")
+        Role customerRole = roleRepository.findByRoleNameIgnoreCase("CUSTOMER")
                 .orElseThrow(() -> new NotFoundException("Role not found"));
         user.setRole(customerRole);
         user.setEmployee(null);
@@ -82,16 +84,38 @@ public class EmployeeServiceImpl implements EmployeeService {
         log.info("Employee with ID {} resigned. Changed role from {} to CUSTOMER",
                 userId, user.getRole().getRoleName());
     }
-
     @Override
-    public List<Employee> findEmployeesByRoleName(String roleName) {
+    public List<EmployeeResponse> findEmployeesByRoleName(String roleName) {
+        List<Employee> employees;
         if (roleName == null || roleName.isBlank()) {
-            return employeeRepository.findAll();
+            employees = employeeRepository.findAll();
         } else {
-            Role role = roleRepository.findByRoleName(roleName.toUpperCase())
+            Role role = roleRepository.findByRoleNameIgnoreCase(roleName.toUpperCase())
                     .orElseThrow(() -> new NotFoundException("Role not found"));
-            return employeeRepository.findByRole(role);
+            employees = employeeRepository.findByRole(role);
         }
+
+        return employees.stream()
+                .map(this::mapToResponse)
+                .collect(Collectors.toList());
+    }
+
+    private EmployeeResponse mapToResponse(Employee employee) {
+        EmployeeResponse resp = new EmployeeResponse();
+        resp.setFirstName(employee.getFirstName());
+        resp.setLastName(employee.getLastName());
+        resp.setEmail(employee.getEmail());
+        resp.setRoleName(employee.getRole() != null ? employee.getRole().getRoleName() : null);
+        resp.setStatus(employee.getStatus() != null ? employee.getStatus().name() : null);
+        resp.setDepartment(employee.getDepartment());
+        resp.setPhone(employee.getPhone());
+        resp.setAddress(employee.getAddress());
+        resp.setGender(employee.getGender() != null ? employee.getGender().name() : null);
+        resp.setDateOfBirth(employee.getDateOfBirth() != null ? employee.getDateOfBirth().toString() : null);
+        resp.setHireDate(employee.getHireDate());
+        resp.setManagerId(employee.getManager() != null ? employee.getManager().getEmployeeId() : null);
+        resp.setUserId(employee.getUser().getUserId());
+        return resp;
     }
 }
 

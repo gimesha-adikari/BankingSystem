@@ -9,6 +9,7 @@ import com.bankingsystem.core.repository.CustomerRepository;
 import com.bankingsystem.core.repository.UserRepository;
 import com.bankingsystem.core.service.CustomerService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
@@ -16,6 +17,7 @@ import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class CustomerServiceImpl implements CustomerService {
@@ -48,8 +50,8 @@ public class CustomerServiceImpl implements CustomerService {
     }
 
     @Override
-    public CustomerResponseDTO updateCustomer(UUID id, CustomerRequestDTO request) {
-        Customer customer = customerRepository.findById(id)
+    public CustomerResponseDTO updateCustomer(CustomerRequestDTO request) {
+        Customer customer = customerRepository.findByUserUserId(request.getUserId())
                 .orElseThrow(() -> new ResourceNotFoundException("Customer not found"));
         customer.setFirstName(request.getFirstName());
         customer.setLastName(request.getLastName());
@@ -71,8 +73,9 @@ public class CustomerServiceImpl implements CustomerService {
         customerRepository.delete(customer);
     }
 
-    private CustomerResponseDTO mapToDTO(Customer customer) {
+    public CustomerResponseDTO mapToDTO(Customer customer) {
         CustomerResponseDTO dto = new CustomerResponseDTO();
+
         dto.setCustomerId(customer.getCustomerId());
         dto.setFirstName(customer.getFirstName());
         dto.setLastName(customer.getLastName());
@@ -80,12 +83,22 @@ public class CustomerServiceImpl implements CustomerService {
         dto.setEmail(customer.getEmail());
         dto.setPhone(customer.getPhone());
         dto.setAddress(customer.getAddress());
-        dto.setDateOfBirth(customer.getDateOfBirth());
+
+        dto.setDateOfBirth(customer.getDateOfBirth() != null ? customer.getDateOfBirth().toString() : null);
+
         dto.setStatus(customer.getStatus());
-        dto.setCreatedAt(customer.getCreatedAt());
-        dto.setUpdatedAt(customer.getUpdatedAt());
+
+        dto.setCreatedAt(customer.getCreatedAt() != null ? customer.getCreatedAt().toString() : null);
+        dto.setUpdatedAt(customer.getUpdatedAt() != null ? customer.getUpdatedAt().toString() : null);
+
+        if (customer.getUser() != null) {
+            dto.setUserId(customer.getUser().getUserId());
+            dto.setUsername(customer.getUser().getUsername());
+        }
+
         return dto;
     }
+
 
     private Customer mapToEntity(CustomerRequestDTO dto) {
         Customer customer = new Customer();
@@ -97,9 +110,13 @@ public class CustomerServiceImpl implements CustomerService {
         customer.setAddress(dto.getAddress());
         customer.setDateOfBirth(dto.getDateOfBirth());
         customer.setStatus((dto.getStatus()));
+        customer.setCreatedAt(LocalDateTime.now());
+        customer.setUpdatedAt(LocalDateTime.now());
         User user = userRepository.findById(dto.getUserId())
                         .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+        log.info("User found for customer {}",user.getUsername());
         customer.setUser(user);
+        customer.getUser().setCustomer(customer);
         return customer;
     }
 }

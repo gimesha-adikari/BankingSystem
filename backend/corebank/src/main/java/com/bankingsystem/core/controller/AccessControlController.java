@@ -1,5 +1,7 @@
 package com.bankingsystem.core.controller;
 
+import com.bankingsystem.core.dto.EmployeeDto;
+import com.bankingsystem.core.dto.EmployeeResponse;
 import com.bankingsystem.core.dto.RoleUpdateRequest;
 import com.bankingsystem.core.entity.*;
 import com.bankingsystem.core.repository.*;
@@ -11,7 +13,9 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/v1/access-control")
@@ -34,6 +38,16 @@ public class AccessControlController {
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<?> listAllEmployees() {
         return ResponseEntity.ok(employeeService.findEmployeesByRoleName(null));
+    }
+
+    @GetMapping("/employees/managers")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<List<EmployeeDto>> getManagers() {
+        List<Employee> managers = employeeRepository.findByRoleRoleNameIgnoreCase("MANAGER");
+        List<EmployeeDto> employeeDtos = managers.stream()
+                .map(employee -> new EmployeeDto(employee.getEmployeeId(), employee.getFirstName(), employee.getLastName()))
+                .collect(Collectors.toList());
+        return ResponseEntity.ok(employeeDtos);
     }
 
     @GetMapping("/users")

@@ -1,18 +1,21 @@
 package com.bankingsystem.core.entity;
 
+import com.bankingsystem.core.enums.Gender;
+import com.bankingsystem.core.enums.Status;
 import com.fasterxml.jackson.annotation.JsonBackReference;
-import com.fasterxml.jackson.annotation.JsonIgnore;
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.persistence.*;
-import lombok.Builder;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.UUID;
-
 @Entity
-@Table(name = "employees", uniqueConstraints = {
-        @UniqueConstraint(columnNames = "email")
-})
+@Table(name = "employees", uniqueConstraints = {@UniqueConstraint(columnNames = "email")})
+@Getter
+@Setter
+@NoArgsConstructor
 public class Employee {
 
     @Id
@@ -47,117 +50,24 @@ public class Employee {
     private LocalDateTime hireDate;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "status", nullable = false, length = 10)
+    @Column(name = "status", nullable = false, length = 20)
     private Status status;
 
     @Column(name = "resignation_date")
     private LocalDateTime resignationDate;
 
-    @OneToOne(mappedBy = "employee")
+    @Enumerated(EnumType.STRING)
+    @Column(name = "gender", nullable = false)
+    private Gender gender;
+
+    @Column(name = "date_of_birth", nullable = false)
+    private LocalDate dateOfBirth;
+
+    @Column(name = "address", nullable = false)
+    private String address;
+
+    @OneToOne(mappedBy = "employee", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     @JsonBackReference
     private User user;
-
-
-    public UUID getEmployeeId() {
-        return employeeId;
-    }
-
-    public void setEmployeeId(UUID employeeId) {
-        this.employeeId = employeeId;
-    }
-
-    public String getFirstName() {
-        return firstName;
-    }
-
-    public void setFirstName(String firstName) {
-        this.firstName = firstName;
-    }
-
-    public String getLastName() {
-        return lastName;
-    }
-
-    public void setLastName(String lastName) {
-        this.lastName = lastName;
-    }
-
-    public String getEmail() {
-        return email;
-    }
-
-    public void setEmail(String email) {
-        this.email = email;
-    }
-
-    public String getPhone() {
-        return phone;
-    }
-
-    public void setPhone(String phone) {
-        this.phone = phone;
-    }
-
-    public Role getRole() {
-        return role;
-    }
-
-    public void setRole(Role role) {
-        this.role = role;
-    }
-
-    public String getDepartment() {
-        return department;
-    }
-
-    public void setDepartment(String department) {
-        this.department = department;
-    }
-
-    public Employee getManager() {
-        return manager;
-    }
-
-    public void setManager(Employee manager) {
-        this.manager = manager;
-    }
-
-    public LocalDateTime getHireDate() {
-        return hireDate;
-    }
-
-    public void setHireDate(LocalDateTime hireDate) {
-        this.hireDate = hireDate;
-    }
-
-    public Status getStatus() {
-        return status;
-    }
-
-    public void setStatus(Status status) {
-        this.status = status;
-    }
-
-    public LocalDateTime getResignationDate() {
-        return resignationDate;
-    }
-
-    public Employee setResignationDate(LocalDateTime resignationDate) {
-        this.resignationDate = resignationDate;
-        return this;
-    }
-
-    public User getUser() {
-        return user;
-    }
-
-    public Employee setUser(User user) {
-        this.user = user;
-        return this;
-    }
-
-    public enum Status {
-        ACTIVE,
-        INACTIVE
-    }
 }
+

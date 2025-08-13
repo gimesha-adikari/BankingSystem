@@ -31,8 +31,9 @@ public class UserController {
 
     @GetMapping("/all")
     @PreAuthorize("hasAnyRole('ADMIN', 'TELLER','MANAGER')")
-    public ResponseEntity<List<UserProfileResponse>> listAllUsers() {
-        List<UserProfileResponse> users = userService.getAllUsers();
+    public ResponseEntity<List<UserProfileResponse>> listAllUsers(
+            @RequestParam(required = false) String search) {
+        List<UserProfileResponse> users = userService.getAllUsers(search);
         return ResponseEntity.ok(users);
     }
 

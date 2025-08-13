@@ -7,7 +7,7 @@ const Dashboard = () => {
 
     return (
         <div className="flex h-screen bg-gradient-to-br from-slate-300 to-slate-600 text-gray-900">
-            <Sidebar isOpen={sidebarOpen} />
+            <Sidebar isOpen={sidebarOpen} role="CUSTOMER"/>
 
             <div className="flex-1 flex flex-col">
                 {/* Mobile Top Bar */}

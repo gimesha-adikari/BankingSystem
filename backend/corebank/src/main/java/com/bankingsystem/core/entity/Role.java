@@ -1,15 +1,22 @@
 package com.bankingsystem.core.entity;
 
 import jakarta.persistence.*;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
 
+import java.util.UUID;
 @Entity
-@Table(name = "roles")
+@Table(name = "roles", uniqueConstraints = {@UniqueConstraint(columnNames = "role_name")})
+@Getter
+@Setter
+@NoArgsConstructor
 public class Role {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    @Column(name = "role_id")
-    private Integer roleId;
+    @GeneratedValue
+    @Column(name = "role_id", columnDefinition = "BINARY(16)")
+    private UUID roleId;
 
     @Column(name = "role_name", nullable = false, unique = true, length = 50)
     private String roleName;
@@ -19,37 +26,5 @@ public class Role {
 
     @Column(name = "permissions", columnDefinition = "JSON")
     private String permissions;
-
-
-    public Integer getRoleId() {
-        return roleId;
-    }
-
-    public void setRoleId(Integer roleId) {
-        this.roleId = roleId;
-    }
-
-    public String getRoleName() {
-        return roleName;
-    }
-
-    public void setRoleName(String roleName) {
-        this.roleName = roleName;
-    }
-
-    public String getDescription() {
-        return description;
-    }
-
-    public void setDescription(String description) {
-        this.description = description;
-    }
-
-    public String getPermissions() {
-        return permissions;
-    }
-
-    public void setPermissions(String permissions) {
-        this.permissions = permissions;
-    }
 }
+

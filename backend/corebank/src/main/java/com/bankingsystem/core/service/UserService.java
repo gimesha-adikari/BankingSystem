@@ -13,7 +13,7 @@ public interface UserService {
     void requestEmailChange(String newEmail);
     void confirmEmailChange(String token);
     UUID getCurrentUserId();
-    List<UserProfileResponse> getAllUsers();
+    List<UserProfileResponse> getAllUsers(String search);
     UserProfileResponse getUserById(UUID id);
     void deleteUser(UUID id);
 }

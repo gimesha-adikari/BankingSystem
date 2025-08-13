@@ -1,6 +1,7 @@
 package com.bankingsystem.core.service.impl;
 
 import com.bankingsystem.core.dto.RoleUpdateRequest;
+import com.bankingsystem.core.enums.Status;
 import com.bankingsystem.core.exceptions.EntityNotFoundException;
 import com.bankingsystem.core.service.EmployeeService;
 import lombok.extern.slf4j.Slf4j;
@@ -33,38 +34,20 @@ public class AccessControlServiceImpl implements AccessControlService {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new EntityNotFoundException("User not found"));
 
-        Role newRole = roleRepository.findByRoleName(request.getRoleName().toUpperCase())
+        Role newRole = roleRepository.findByRoleNameIgnoreCase(request.getRoleName())
                 .orElseThrow(() -> new EntityNotFoundException("Role not found"));
 
         user.setRole(newRole);
-        log.info("Updated role for user {} to {}", userId, request.getRoleName());
 
         if (!"CUSTOMER".equalsIgnoreCase(request.getRoleName())) {
-            Optional<Employee> existingEmployee = employeeRepository.findByEmail(user.getEmail());
-            Employee employee = existingEmployee.orElseGet(Employee::new);
+            Employee employee = employeeRepository.findByEmail(user.getEmail())
+                    .orElseGet(Employee::new);
 
-            employee.setEmail(request.getEmail() != null ? request.getEmail() : user.getEmail());
-
-            if (request.getFirstName() != null && !request.getFirstName().isBlank()) {
-                employee.setFirstName(request.getFirstName());
-            } else {
-                throw new IllegalArgumentException("First name is required for employee");
-            }
-
-            if (request.getLastName() != null && !request.getLastName().isBlank()) {
-                employee.setLastName(request.getLastName());
-            } else {
-                throw new IllegalArgumentException("Last name is required for employee");
-            }
-
-            if (request.getPhone() != null && !request.getPhone().isBlank()) {
-                employee.setPhone(request.getPhone());
-            }
-
-            if (request.getDepartment() != null && !request.getDepartment().isBlank()) {
-                employee.setDepartment(request.getDepartment());
-            }
-
+            employee.setEmail(request.getEmail());
+            employee.setFirstName(request.getFirstName());
+            employee.setLastName(request.getLastName());
+            employee.setPhone(request.getPhone());
+            employee.setDepartment(request.getDepartment());
             employee.setRole(newRole);
 
             if (request.getManagerId() != null) {
@@ -73,21 +56,26 @@ public class AccessControlServiceImpl implements AccessControlService {
                 employee.setManager(manager);
             }
 
-            if (existingEmployee.isEmpty()) {
+            if (employee.getHireDate() == null) {
                 employee.setHireDate(LocalDateTime.now());
             }
 
-            employee.setStatus(Employee.Status.ACTIVE);
+            employee.setStatus(request.getStatus());
+            employee.setGender(request.getGender());
+            employee.setDateOfBirth(request.getDateOfBirth());
+            employee.setAddress(request.getAddress());
+
             employee.setUser(user);
             user.setEmployee(employee);
-            userRepository.save(user);
             employeeRepository.save(employee);
+            userRepository.save(user);
         } else {
             if (user.getEmployee() != null) {
                 employeeService.resignEmployee(user.getUserId());
             }
         }
     }
+
 
 
 }

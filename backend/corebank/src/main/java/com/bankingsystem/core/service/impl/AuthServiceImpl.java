@@ -53,7 +53,7 @@ public class AuthServiceImpl implements AuthService {
 
         validatePasswordStrength(request.getPassword());
 
-        if (userRepository.existsByUsername(request.getUsername())) {
+        if (userRepository.existsByUsernameIgnoreCase(request.getUsername())) {
             throw new IllegalArgumentException("Username is already taken");
         }
 
@@ -63,7 +63,7 @@ public class AuthServiceImpl implements AuthService {
 
         
         
-        Role defaultRole = roleRepository.findByRoleName("CUSTOMER")
+        Role defaultRole = roleRepository.findByRoleNameIgnoreCase("CUSTOMER")
                 .orElseThrow(() -> new IllegalStateException("Default role not found"));
 
         User user = new User();

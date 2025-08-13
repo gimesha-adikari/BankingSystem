@@ -23,7 +23,7 @@ const Home = () => {
 
     return (
         <div className="flex h-screen bg-gradient-to-b from-gray-600 to-gray-900">
-            <Sidebar isOpen={sidebarOpen} />
+            <Sidebar isOpen={sidebarOpen} role="CUSTOMER" />
 
             <div className="flex-1 flex flex-col">
                 {/* Mobile Top Bar */}

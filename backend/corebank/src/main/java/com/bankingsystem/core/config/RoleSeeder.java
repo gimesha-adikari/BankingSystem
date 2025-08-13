@@ -26,7 +26,7 @@ public class RoleSeeder implements CommandLineRunner {
     }
 
     private void createRoleIfNotExists(String roleName) {
-        roleRepository.findByRoleName(roleName).orElseGet(() -> {
+        roleRepository.findByRoleNameIgnoreCase(roleName).orElseGet(() -> {
             Role role = new Role();
             role.setRoleName(roleName);
             return roleRepository.save(role);
