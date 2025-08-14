@@ -1,35 +1,44 @@
 package com.bankingsystem.mobile.data.config
 
+import com.bankingsystem.mobile.BuildConfig
+import com.bankingsystem.mobile.data.local.AuthStore
 import com.bankingsystem.mobile.data.service.ApiService
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
+import java.util.concurrent.TimeUnit
 
 /**
- * Singleton object for Retrofit client configuration.
+ * Retrofit singleton with auth + logging interceptors.
+ * IMPORTANT: Call init(authStore) before using apiService.
  */
 object RetrofitClient {
-    // Base URL for the API. Using 10.0.2.2 for Android emulator to connect to localhost.
-    private const val BASE_URL = "http://10.0.2.2:8080/"
+    private const val BASE_URL = BuildConfig.API_BASE_URL
 
-    // HTTP logging interceptor for debugging network requests and responses.
-    // Logs the body of the requests and responses.
-    private val logging = HttpLoggingInterceptor().apply {
-        level = HttpLoggingInterceptor.Level.BODY
-    }
+    @Volatile
+    private var _apiService: ApiService? = null
+    val apiService: ApiService
+        get() = _apiService ?: error("RetrofitClient not initialized. Call RetrofitClient.init(authStore) first.")
 
-    // OkHttpClient with the logging interceptor.
-    private val client = OkHttpClient.Builder()
-        .addInterceptor(logging)
-        .build()
+    fun isInitialized(): Boolean = _apiService != null
+    fun init(authStore: AuthStore, onUnauthorized: () -> Unit = {}) {
+        if (_apiService != null) return
 
-    /**
-     * Lazily initialized Retrofit instance for [ApiService].
-     * This ensures that the Retrofit instance is created only when it's first accessed.
-     */
-    val apiService: ApiService by lazy {
-        Retrofit.Builder()
+        val logging = HttpLoggingInterceptor().apply {
+            level = HttpLoggingInterceptor.Level.BODY // set NONE in release if you prefer
+        }
+
+        val client = OkHttpClient.Builder()
+            .connectTimeout(15, TimeUnit.SECONDS)
+            .readTimeout(30, TimeUnit.SECONDS)
+            .writeTimeout(30, TimeUnit.SECONDS)
+            .addInterceptor(logging)
+            .addInterceptor(AuthInterceptor(authStore))
+            .addInterceptor(AuthErrorInterceptor(onUnauthorized))
+            .build()
+
+        _apiService = Retrofit.Builder()
             .baseUrl(BASE_URL)
             .client(client)
             .addConverterFactory(GsonConverterFactory.create())

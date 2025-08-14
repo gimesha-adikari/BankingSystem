@@ -14,11 +14,11 @@ val GoogleFontsProvider = Provider(
 )
 
 // Pick the font you want (change "Inter" to "Manrope", "Poppins", etc.)
-private val Inter = GoogleFont("Inter")
+private val Manrope = GoogleFont("Manrope")
 
 val AppFontFamily = FontFamily(
-    Font(googleFont = Inter, fontProvider = GoogleFontsProvider, weight = FontWeight.Normal),
-    Font(googleFont = Inter, fontProvider = GoogleFontsProvider, weight = FontWeight.Medium),
-    Font(googleFont = Inter, fontProvider = GoogleFontsProvider, weight = FontWeight.SemiBold),
-    Font(googleFont = Inter, fontProvider = GoogleFontsProvider, weight = FontWeight.Bold),
+    Font(googleFont = Manrope, fontProvider = GoogleFontsProvider, weight = FontWeight.Normal),
+    Font(googleFont = Manrope, fontProvider = GoogleFontsProvider, weight = FontWeight.Medium),
+    Font(googleFont = Manrope, fontProvider = GoogleFontsProvider, weight = FontWeight.SemiBold),
+    Font(googleFont = Manrope, fontProvider = GoogleFontsProvider, weight = FontWeight.Bold),
 )

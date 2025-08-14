@@ -56,7 +56,7 @@ class MainActivity : ComponentActivity() {
                     lockerAuthenticated = false
                     lockEnabled = false
                     storedPin = ""
-//                    loginViewModel.logout()
+                    loginViewModel.logout()
                 }
 
                 if (showSplash) {

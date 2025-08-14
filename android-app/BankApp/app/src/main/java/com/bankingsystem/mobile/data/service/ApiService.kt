@@ -1,14 +1,15 @@
 package com.bankingsystem.mobile.data.service
 
-import com.bankingsystem.mobile.data.model.LoginRequest
-import com.bankingsystem.mobile.data.model.LoginResponse
 import com.bankingsystem.mobile.data.model.RegisterRequest
+import com.bankingsystem.mobile.data.model.UserProfile
 import com.bankingsystem.mobile.data.model.ValidateTokenResponse
+import com.bankingsystem.mobile.data.remote.dto.LoginRequest
+import com.bankingsystem.mobile.data.remote.dto.LoginResponse
 import retrofit2.Response
 import retrofit2.http.Body
 import retrofit2.http.GET
-import retrofit2.http.Header
 import retrofit2.http.POST
+import retrofit2.http.PUT
 import retrofit2.http.Query
 
 interface ApiService {
@@ -34,7 +35,21 @@ interface ApiService {
     ): Response<Unit>
 
     @GET("api/v1/auth/validate-token")
-    suspend fun validateToken(
-        @Header("Authorization") authHeader: String
-    ): Response<ValidateTokenResponse>
+    suspend fun validateToken(): Response<ValidateTokenResponse>
+
+    @POST("api/v1/auth/logout")
+    suspend fun logout(): Response<Unit>
+
+    @GET("api/v1/users/me")
+    suspend fun getMe(): Response<UserProfile>
+
+    @PUT("api/v1/users/me")
+    suspend fun updateMe(
+        @Body payload: Map<String, String>
+    ): Response<Unit>
+
+    @PUT("/api/v1/auth/change-password")
+    suspend fun changePassword(
+        @Body body: Map<String, String>
+    ): retrofit2.Response<Unit>
 }

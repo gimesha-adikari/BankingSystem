@@ -1,12 +1,11 @@
 package com.bankingsystem.mobile.ui.login
 
-import com.bankingsystem.mobile.data.storage.TokenManager
 import android.content.Context
-import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.bankingsystem.mobile.data.config.RetrofitClient
 import com.bankingsystem.mobile.data.repository.UserRepository
+import com.bankingsystem.mobile.data.storage.TokenManager
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -15,21 +14,9 @@ import kotlinx.coroutines.launch
  * Represents the different states of the login process.
  */
 sealed class LoginState {
-    /** Represents the initial or idle state. */
     object Idle : LoginState()
-    /** Represents the state when login is in progress. */
     object Loading : LoginState()
-    /**
-     * Represents a successful login.
-     * @property token The authentication token.
-     * @property username The username of the logged-in user.
-     * @property role The role of the logged-in user.
-     */
     data class Success(val token: String, val username: String, val role: String) : LoginState()
-    /**
-     * Represents an error during login.
-     * @property error The error message.
-     */
     data class Error(val error: String) : LoginState()
 }
 
@@ -37,28 +24,17 @@ sealed class LoginState {
  * Represents the different states of the forgot password process.
  */
 sealed class ForgotPasswordState {
-    /** Represents the initial or idle state. */
     object Idle : ForgotPasswordState()
-    /** Represents the state when the forgot password request is in progress. */
     object Loading : ForgotPasswordState()
-    /**
-     * Represents a successful forgot password request.
-     * @property message The success message.
-     */
     data class Success(val message: String) : ForgotPasswordState()
-    /**
-     * Represents an error during the forgot password request.
-     * @property error The error message.
-     */
     data class Error(val error: String) : ForgotPasswordState()
 }
 
 /**
  * ViewModel for the Login screen.
  *
- * This ViewModel handles the logic for user login, password recovery, and logout.
- * It interacts with the [UserRepository] to perform these operations and updates
- * the UI state through [LoginState] and [ForgotPasswordState].
+ * Handles login / auto-login / forgot password / logout.
+ * NOTE: Authorization header is injected globally by AuthInterceptor (via RetrofitClient.init()).
  */
 class LoginViewModel(
     context: Context,
@@ -74,8 +50,10 @@ class LoginViewModel(
     private val _forgotPasswordState = MutableStateFlow<ForgotPasswordState>(ForgotPasswordState.Idle)
     val forgotPasswordState: StateFlow<ForgotPasswordState> = _forgotPasswordState
 
-    val tokenManager = TokenManager(context)
-
+    /**
+     * Manual login with username/password.
+     * Repository saves the token internally; no need to save it again here.
+     */
     fun loginUser(username: String, password: String) {
         if (username.isBlank() || password.isBlank()) {
             _loginState.value = LoginState.Error("Username or password cannot be blank")
@@ -84,35 +62,32 @@ class LoginViewModel(
 
         viewModelScope.launch {
             _loginState.value = LoginState.Loading
-            try {
-                val result = userRepository.login(username.trim(), password)
-                result.fold(
-                    onSuccess = { loginResponse ->
-                        viewModelScope.launch {
-                            tokenManager.saveToken(loginResponse.token)
-                        }
-                        _loginState.value = LoginState.Success(
-                            token = loginResponse.token,
-                            username = loginResponse.username,
-                            role = loginResponse.role
-                        )
-                    },
-                    onFailure = { error ->
-                        _loginState.value = LoginState.Error(error.message ?: "Login failed")
-                    }
-                )
-            } catch (e: Exception) {
-                _loginState.value = LoginState.Error(e.message ?: "Network error occurred")
-            }
+            val result = userRepository.login(username.trim(), password)
+            result.fold(
+                onSuccess = { loginResponse ->
+                    _loginState.value = LoginState.Success(
+                        token = loginResponse.token,
+                        username = loginResponse.username,
+                        role = loginResponse.role
+                    )
+                },
+                onFailure = { error ->
+                    _loginState.value = LoginState.Error(error.message ?: "Login failed")
+                }
+            )
         }
     }
 
+    /**
+     * Auto-login by observing the token flow from the repository.
+     * If a token exists, validate it (no-arg; header via interceptor).
+     */
     fun autoLogin() {
         viewModelScope.launch {
-            tokenManager.tokenFlow.collect { token ->
+            userRepository.tokenFlow.collect { token ->
                 if (!token.isNullOrBlank()) {
                     _loginState.value = LoginState.Loading
-                    val result = userRepository.validateToken(token)
+                    val result = userRepository.validateToken()
                     result.fold(
                         onSuccess = { validated ->
                             _loginState.value = LoginState.Success(
@@ -122,7 +97,9 @@ class LoginViewModel(
                             )
                         },
                         onFailure = {
-                            tokenManager.clearToken()
+                            // If token invalid, repository will not clear it automatically here.
+                            // We can clear it by calling logout() or expose a clear method on repo if needed.
+                            userRepository.logout()
                             _loginState.value = LoginState.Idle
                         }
                     )
@@ -133,7 +110,9 @@ class LoginViewModel(
         }
     }
 
-
+    /**
+     * Forgot password (backend sends email).
+     */
     fun forgotPassword(email: String) {
         if (email.isBlank() || !email.contains("@")) {
             _forgotPasswordState.value = ForgotPasswordState.Error("Invalid email address")
@@ -143,8 +122,8 @@ class LoginViewModel(
         viewModelScope.launch {
             _forgotPasswordState.value = ForgotPasswordState.Loading
             try {
-                val response = userRepository.forgotPassword(email.trim())
-                if (response) {
+                val ok = userRepository.forgotPassword(email.trim())
+                if (ok) {
                     _forgotPasswordState.value = ForgotPasswordState.Success("Password reset email sent successfully")
                 } else {
                     _forgotPasswordState.value = ForgotPasswordState.Error("Failed to send reset email")
@@ -155,12 +134,18 @@ class LoginViewModel(
         }
     }
 
+    /**
+     * Logout: call repo.logout() (server logout if available, then clear token).
+     * Sets UI state to Idle so UI can navigate to Login screen.
+     */
     fun logoutUser() {
         viewModelScope.launch {
-            userRepository.logout()
+            try { userRepository.logout() } catch (_: Exception) {}
             _loginState.value = LoginState.Idle
         }
     }
+
+    fun logout() = logoutUser()
 
     fun resetLoginState() {
         _loginState.value = LoginState.Idle

@@ -1,36 +1,25 @@
 package com.bankingsystem.mobile.data.repository
 
-// Import statement for TokenManager, likely a class for managing authentication tokens.
-import com.bankingsystem.mobile.data.storage.TokenManager
 import com.bankingsystem.mobile.data.config.RetrofitClient
-import com.bankingsystem.mobile.data.model.LoginRequest
-import com.bankingsystem.mobile.data.model.LoginResponse
 import com.bankingsystem.mobile.data.model.RegisterRequest
 import com.bankingsystem.mobile.data.model.ValidateTokenResponse
+import com.bankingsystem.mobile.data.remote.dto.LoginRequest
+import com.bankingsystem.mobile.data.remote.dto.LoginResponse
 import com.bankingsystem.mobile.data.service.ApiService
+import com.bankingsystem.mobile.data.storage.TokenManager
 import retrofit2.HttpException
 import java.io.IOException
 
 /**
- * Repository class for handling user-related data operations.
- *
- * This class is responsible for interacting with the backend API for user authentication,
- * registration, and other user-specific actions. It uses [ApiService] for network requests
- * and [TokenManager] for managing user authentication tokens.
- *
- * @property apiService An instance of [ApiService] used to make network calls to the backend.
- *                      Defaults to the singleton instance provided by [RetrofitClient.apiService].
- * @property tokenManager An instance of [TokenManager] used to save, retrieve, and clear
- *                        authentication tokens.
+ * Repository for auth/user actions.
+ * Auth header is injected globally by AuthInterceptor.
  */
 class UserRepository(
     private val apiService: ApiService = RetrofitClient.apiService,
     private val tokenManager: TokenManager
 ) {
 
-    /**
-     * Attempts to log in a user with the given username and password.
-     */
+    /** Login and persist token */
     suspend fun login(username: String, password: String): Result<LoginResponse> {
         return try {
             val response = apiService.loginUser(LoginRequest(username, password))
@@ -52,16 +41,22 @@ class UserRepository(
         }
     }
 
-    /**
-     * Logs out the current user by clearing their authentication token.
+    /** Logout:
+     *  1) Try server logout (if endpoint available)
+     *  2) Clear local token regardless of server result
      */
     suspend fun logout() {
-        tokenManager.clearToken()
+        try {
+            // If the endpoint doesn't exist or returns 404/405, it's okay—we still clear locally
+            apiService.logout()
+        } catch (_: Exception) {
+            // swallow; local clear still happens
+        } finally {
+            tokenManager.clearToken()
+        }
     }
 
-    /**
-     * Checks if a given username is available for registration.
-     */
+    /** Check username availability (200 = available, 409 = taken) */
     suspend fun checkUsernameAvailability(username: String): Boolean {
         if (username.length < 3) return false
         return try {
@@ -77,9 +72,7 @@ class UserRepository(
         }
     }
 
-    /**
-     * Registers a new user with the provided username, email, and password.
-     */
+    /** Register a new user */
     suspend fun registerUser(username: String, email: String, password: String): Boolean {
         return try {
             val request = RegisterRequest(username, email, password)
@@ -91,9 +84,7 @@ class UserRepository(
         }
     }
 
-    /**
-     * Initiates the password recovery process for the given email address.
-     */
+    /** Forgot password */
     suspend fun forgotPassword(email: String): Boolean {
         return try {
             val response = apiService.forgotPassword(email)
@@ -104,9 +95,10 @@ class UserRepository(
         }
     }
 
-    suspend fun validateToken(token: String): Result<ValidateTokenResponse> {
+    /** Validate token with header injected by interceptor */
+    suspend fun validateToken(): Result<ValidateTokenResponse> {
         return try {
-            val response = apiService.validateToken("Bearer $token")
+            val response = apiService.validateToken()
             if (response.isSuccessful && response.body() != null) {
                 Result.success(response.body()!!)
             } else {
@@ -117,9 +109,6 @@ class UserRepository(
         }
     }
 
-
-    /**
-     * A Flow that emits the current authentication token, allowing observers to react to token changes.
-     */
+    /** Reactive stream of the current token (if you need it elsewhere) */
     val tokenFlow = tokenManager.tokenFlow
 }

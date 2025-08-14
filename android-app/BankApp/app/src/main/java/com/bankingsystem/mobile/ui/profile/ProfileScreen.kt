@@ -62,7 +62,6 @@ fun ProfileScreen(
     profile: UserProfile? = null,
     isLoading: Boolean = false,
     errorMessage: String? = null,
-    // inline editing controls (as you already had)
     editingField: String? = null,
     tempValue: String = "",
     onEditClicked: (field: String) -> Unit = {},
@@ -70,16 +69,16 @@ fun ProfileScreen(
     onSaveEditing: () -> Unit = {},
     onValueChange: (String) -> Unit = {},
     onChangePasswordClick: () -> Unit = {},
-    // navigation drawer
     selectedItem: String = "Profile",
-    onNavigate: (String) -> Unit = {}
+    onNavigate: (String) -> Unit = {},
+    isCheckingUsername: Boolean = false,
+    isUsernameAvailable: Boolean? = null,
 ) {
     var isSidebarOpen by remember { mutableStateOf(false) }
     val sidebarOffset by animateDpAsState(if (isSidebarOpen) 0.dp else (-280).dp, label = "sidebar")
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
     Box(Modifier.fillMaxSize()) {
-        // Background behind EVERYTHING
         FadingAppBackground()
 
         Scaffold(
@@ -150,7 +149,6 @@ fun ProfileScreen(
                             .padding(horizontal = 20.dp, vertical = 16.dp),
                         verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
-                        // --- Hero header ---
                         item {
                             ProfileHeader(
                                 name = buildName(profile),
@@ -159,13 +157,13 @@ fun ProfileScreen(
                             )
                         }
 
-                        // --- Editable fields ---
                         item {
                             SectionCard(title = "Details", modifier = Modifier.fillMaxWidth()) {
                                 Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
                                     fields.forEach { (fieldKey, label) ->
                                         val isEditing = editingField == fieldKey
-                                        val value = if (isEditing) tempValue else profile.getFieldValue(fieldKey).orEmpty()
+                                        val value = if (isEditing) tempValue
+                                        else profile.getFieldValue(fieldKey).orEmpty()
 
                                         ProfileFieldRow(
                                             label = label,
@@ -174,14 +172,15 @@ fun ProfileScreen(
                                             onEditClick = { onEditClicked(fieldKey) },
                                             onValueChange = onValueChange,
                                             onCancel = onCancelEditing,
-                                            onSave = onSaveEditing
+                                            onSave = onSaveEditing,
+                                            isCheckingUsername = if (fieldKey == "username") isCheckingUsername else false,
+                                            isUsernameAvailable = if (fieldKey == "username") isUsernameAvailable else null
                                         )
                                     }
                                 }
                             }
                         }
 
-                        // --- Actions ---
                         item {
                             Button(
                                 onClick = onChangePasswordClick,
@@ -199,7 +198,6 @@ fun ProfileScreen(
             }
         }
 
-        // Scrim when sidebar is open
         if (isSidebarOpen) {
             Box(
                 modifier = Modifier
@@ -209,7 +207,6 @@ fun ProfileScreen(
             )
         }
 
-        // Sidebar panel
         Surface(
             modifier = Modifier
                 .fillMaxHeight()
@@ -231,7 +228,7 @@ fun ProfileScreen(
     }
 }
 
-/* --------------------------------- Pieces --------------------------------- */
+/* --- Pieces --- */
 
 @Composable
 private fun ProfileHeader(
@@ -254,7 +251,6 @@ private fun ProfileHeader(
                 .fillMaxWidth()
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                // Avatar
                 Box(
                     Modifier
                         .size(64.dp)
@@ -321,7 +317,9 @@ private fun ProfileFieldRow(
     onEditClick: () -> Unit,
     onValueChange: (String) -> Unit,
     onCancel: () -> Unit,
-    onSave: () -> Unit
+    onSave: () -> Unit,
+    isCheckingUsername: Boolean = false,
+    isUsernameAvailable: Boolean? = null
 ) {
     Column {
         Text(
@@ -375,34 +373,61 @@ private fun ProfileFieldRow(
                 }
             }
         }
+
+        if (isEditing && label == "Username") {
+            val text = when {
+                isCheckingUsername -> "Checking username..."
+                isUsernameAvailable == true -> "Username is available"
+                isUsernameAvailable == false -> "Username is not available or too short"
+                else -> null
+            }
+            if (text != null) {
+                Text(
+                    text = text,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = when {
+                        isCheckingUsername -> MaterialTheme.colorScheme.onSurfaceVariant
+                        isUsernameAvailable == true -> MaterialTheme.colorScheme.tertiary
+                        else -> MaterialTheme.colorScheme.error
+                    },
+                    modifier = Modifier.padding(top = 4.dp)
+                )
+            }
+        }
     }
 }
 
-/* --------------------------------- Helpers -------------------------------- */
-
-private fun buildName(profile: UserProfile?): String {
+/* --- Helpers --- */
+private fun buildName(profile: com.bankingsystem.mobile.data.model.UserProfile?): String {
     if (profile == null) return ""
-    val parts = listOfNotNull(profile.firstName.trim(), profile.lastName.trim()).filter { it.isNotBlank() }
+    val first = profile.firstName?.trim().orEmpty()
+    val last  = profile.lastName?.trim().orEmpty()
+    val user  = profile.username?.trim().orEmpty()
+    val parts = listOf(first, last).filter { it.isNotBlank() }
     return when {
         parts.isNotEmpty() -> parts.joinToString(" ")
-        profile.username.isNotBlank() -> profile.username
+        user.isNotBlank() -> user
         else -> ""
     }
 }
 
-private fun UserProfile?.getFieldValue(fieldName: String): String? = when (fieldName) {
-    "username" -> this?.username
-    "firstName" -> this?.firstName
-    "lastName" -> this?.lastName
-    "email" -> this?.email
-    "address" -> this?.address
-    "city" -> this?.city
-    "state" -> this?.state
-    "country" -> this?.country
-    "postalCode" -> this?.postalCode
-    "homeNumber" -> this?.homeNumber
-    "workNumber" -> this?.workNumber
-    "officeNumber" -> this?.officeNumber
-    "mobileNumber" -> this?.mobileNumber
-    else -> null
+
+private fun com.bankingsystem.mobile.data.model.UserProfile?.getFieldValue(fieldName: String): String {
+    val raw: String? = when (fieldName) {
+        "username"     -> this?.username
+        "firstName"    -> this?.firstName
+        "lastName"     -> this?.lastName
+        "email"        -> this?.email
+        "address"      -> this?.address
+        "city"         -> this?.city
+        "state"        -> this?.state
+        "country"      -> this?.country
+        "postalCode"   -> this?.postalCode
+        "homeNumber"   -> this?.homeNumber
+        "workNumber"   -> this?.workNumber
+        "officeNumber" -> this?.officeNumber
+        "mobileNumber" -> this?.mobileNumber
+        else -> null
+    }
+    return raw?.trim().orEmpty()
 }

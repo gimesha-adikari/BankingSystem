@@ -189,11 +189,10 @@ public class AuthController {
         return ResponseEntity.ok(response);
     }
 
-    @PostMapping("/auth/refresh-token")
+    @PostMapping("/refresh-token")
     public ResponseEntity<?> refreshToken(@RequestBody Map<String, String> payload,
                                           @RequestHeader("Authorization") String authHeader) {
         try {
-            // Extract the token from header "Bearer <token>"
             if (authHeader == null || !authHeader.startsWith("Bearer ")) {
                 return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("error", "Missing or invalid Authorization header"));
             }
@@ -201,21 +200,17 @@ public class AuthController {
             String token = authHeader.substring(7);
             String username = payload.get("username");
 
-            // Validate the token (you may have a JwtUtils class or similar)
             if (!jwtUtils.validateJwtToken(token)) {
                 return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("error", "Invalid token"));
             }
 
-            // Optionally check if username from token matches username in body
             String tokenUsername = jwtUtils.getUserNameFromJwtToken(token);
             if (!tokenUsername.equals(username)) {
                 return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("error", "Token username does not match payload username"));
             }
 
-            // Generate a new token (usually extends expiry)
             String newToken = jwtUtils.generateJwtToken(username, userRepository.findByUsername(username).get().getRole().getRoleName());
 
-            // Return the new token in the response
             return ResponseEntity.ok(Map.of("token", newToken));
         } catch (Exception e) {
             e.printStackTrace();

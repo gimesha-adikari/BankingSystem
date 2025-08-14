@@ -1,12 +1,24 @@
 package com.bankingsystem.mobile.ui.navigation
 
-import androidx.compose.runtime.Composable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import com.bankingsystem.mobile.App
+import com.bankingsystem.mobile.data.config.RetrofitClient
+import com.bankingsystem.mobile.data.local.AuthStore
+import com.bankingsystem.mobile.data.local.AuthStoreImpl
+import com.bankingsystem.mobile.data.remote.AuthApiImpl
+import com.bankingsystem.mobile.data.storage.TokenManager
 import com.bankingsystem.mobile.ui.home.BankHomeScreen
-import com.bankingsystem.mobile.ui.profile.ProfileScreen
+import com.bankingsystem.mobile.ui.profile.ProfileRoute
 import com.bankingsystem.mobile.ui.settings.SettingsScreen
 
 @Composable
@@ -15,6 +27,23 @@ fun AppNavHost(
     onLogout: () -> Unit,
     nav: NavHostController = rememberNavController()
 ) {
+    val context = LocalContext.current
+    val app = context.applicationContext as? App
+
+    // Prefer app-scoped store; fall back to local if needed
+    val authStore: AuthStore = app?.authStore ?: remember { AuthStoreImpl(TokenManager(context)) }
+
+    // Track whether Retrofit is ready
+    var retrofitReady by remember { mutableStateOf(RetrofitClient.isInitialized()) }
+
+    // Initialize Retrofit if needed (runs after first composition)
+    LaunchedEffect(authStore) {
+        if (!retrofitReady) {
+            RetrofitClient.init(authStore = authStore)
+            retrofitReady = true
+        }
+    }
+
     NavHost(navController = nav, startDestination = Routes.HOME) {
 
         composable(Routes.HOME) {
@@ -26,10 +55,22 @@ fun AppNavHost(
         }
 
         composable(Routes.PROFILE) {
-            ProfileScreen(
-                selectedItem = "Profile",
-                onNavigate = { label -> navigateByLabel(nav, label, onLogout) }
-            )
+            if (!retrofitReady) {
+                // Show a quick loader until Retrofit is initialized
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator()
+                }
+            } else {
+                // Only read apiService AFTER ready is true
+                val apiService = remember { RetrofitClient.apiService }
+                val authApi = remember { AuthApiImpl(apiService) }
+
+                ProfileRoute(
+                    api = authApi,
+                    store = authStore,
+                    onNavigate = { label -> navigateByLabel(nav, label, onLogout) }
+                )
+            }
         }
 
         composable(Routes.SETTINGS) {
@@ -39,13 +80,8 @@ fun AppNavHost(
             )
         }
 
-        // Optional placeholders for future screens
-        composable(Routes.ACCOUNTS) {
-            // AccountsScreen(... pass onNavigate = { label -> navigateByLabel(nav, label, onLogout) })
-        }
-        composable(Routes.PAYMENTS) {
-            // PaymentsScreen(...)
-        }
+        composable(Routes.ACCOUNTS) { /* TODO */ }
+        composable(Routes.PAYMENTS) { /* TODO */ }
     }
 }
 
@@ -57,12 +93,12 @@ private fun navigateByLabel(
     onLogout: () -> Unit
 ) {
     val route = when (label) {
-        "Home" -> Routes.HOME
-        "Profile" -> Routes.PROFILE
+        "Home"     -> Routes.HOME
+        "Profile"  -> Routes.PROFILE
         "Settings" -> Routes.SETTINGS
         "Accounts" -> Routes.ACCOUNTS
         "Payments" -> Routes.PAYMENTS
-        "Logout" -> {
+        "Logout"   -> {
             onLogout()
             return
         }
