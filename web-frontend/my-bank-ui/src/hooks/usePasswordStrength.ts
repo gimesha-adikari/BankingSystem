@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { checkPasswordStrength } from "../utils/validationUtils";
+import { checkPasswordStrength } from "@/utils/validationUtils";
 
 export function usePasswordStrength(password: string) {
     const [score, setScore] = useState(0);

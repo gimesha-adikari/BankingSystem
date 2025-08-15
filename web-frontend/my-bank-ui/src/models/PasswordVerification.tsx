@@ -1,67 +1,98 @@
-// src/models/CurrentPasswordVerificationStep.tsx
-import React, { useState } from "react";
+import { useState } from "react";
+import type { ChangeEvent, FormEvent } from "react";
 import InputField from "../components/InputField";
-import { useAlert } from "../contexts/AlertContext";
+import { useAlert } from "@/contexts/use-alert";
+import api, { type NormalizedError } from "@/api/axios";
 
 interface Props {
-    token: string | null;
-    onVerified: (password: string) => void;  // Pass password back when verified
+    /** Optional: legacy; axios interceptor supplies Authorization header */
+    token?: string | null;
+    onVerified: (password: string) => void;
     onCancel: () => void;
 }
 
-export default function PasswordVerification({ token, onVerified, onCancel }: Props) {
+export default function PasswordVerification({ onVerified, onCancel }: Props) {
     const [password, setPassword] = useState("");
+    const [submitting, setSubmitting] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+
     const { showAlert } = useAlert();
 
-    const verifyPassword = async () => {
-        if (!token) {
-            showAlert("You must be logged in.", "error");
-            return;
-        }
+    const onChange = (e: ChangeEvent<HTMLInputElement>) => {
+        setPassword(e.target.value);
+        if (error) setError(null);
+    };
+
+    const onSubmit = async (e?: FormEvent) => {
+        e?.preventDefault();
+        const pw = password.trim();
+        if (!pw) return;
+
         try {
-            const res = await fetch("/api/v1/users/verify-password", {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    Authorization: `Bearer ${token}`,
-                },
-                body: JSON.stringify({ password }),
-            });
-            if (res.ok) {
-                onVerified(password);
-            } else {
-                showAlert("Incorrect password.", "error");
-            }
-        } catch {
-            showAlert("Failed to verify password.", "error");
+            setSubmitting(true);
+            setError(null);
+
+            await api.post("/api/v1/users/verify-password", { password: pw });
+
+            onVerified(pw);
+        } catch (err) {
+            const n = err as NormalizedError;
+            const msg = n.message || "Incorrect password.";
+            setError(msg);
+            showAlert(msg, "error");
+        } finally {
+            setSubmitting(false);
         }
     };
 
     return (
-        <>
-            <h2 className="text-xl font-semibold mb-4">Confirm Current Password</h2>
+        <form onSubmit={onSubmit}>
+            <h2 className="text-xl font-semibold mb-2">Confirm Current Password</h2>
+            <p className="text-sm text-gray-600 mb-4">
+                For your security, please confirm your current password to continue.
+            </p>
+
             <div className="mb-4">
                 <InputField
                     label="Current Password"
                     type="password"
+                    name="currentPassword"
                     value={password}
-                    onChange={(e) => setPassword(e.target.value)}
+                    onChange={onChange}
                     placeholder="••••••••"
                     autoFocus
+                    autoComplete="current-password"
+                    error={error ?? undefined}
                 />
+                {error && (
+                    <div className="mt-1 text-sm text-rose-600" role="alert" aria-live="polite">
+                        {error}
+                    </div>
+                )}
             </div>
+
             <div className="flex justify-end gap-2">
-                <button onClick={onCancel} className="px-4 py-2 bg-gray-300 rounded">
+                <button
+                    type="button"
+                    onClick={onCancel}
+                    disabled={submitting}
+                    className="px-4 py-2 rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-60"
+                >
                     Cancel
                 </button>
                 <button
-                    onClick={verifyPassword}
-                    disabled={!password.trim()}
-                    className="px-4 py-2 bg-blue-600 text-white rounded disabled:opacity-50"
+                    type="submit"
+                    disabled={submitting || password.trim().length === 0}
+                    className={[
+                        "px-4 py-2 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-indigo-500",
+                        submitting || password.trim().length === 0
+                            ? "bg-indigo-400 cursor-not-allowed"
+                            : "bg-indigo-600 hover:bg-indigo-700",
+                    ].join(" ")}
                 >
-                    Confirm
+                    {submitting ? "Verifying…" : "Confirm"}
                 </button>
             </div>
-        </>
+        </form>
     );
 }

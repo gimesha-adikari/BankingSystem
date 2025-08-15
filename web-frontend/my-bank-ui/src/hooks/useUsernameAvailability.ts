@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { checkUsernameAvailability } from "../utils/validationUtils";
+import { checkUsernameAvailability } from "@/utils/validationUtils";
 
 export function useUsernameAvailability(username: string) {
     const [available, setAvailable] = useState<boolean | null>(null);

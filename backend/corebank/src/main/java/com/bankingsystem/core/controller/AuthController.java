@@ -1,9 +1,6 @@
 package com.bankingsystem.core.controller;
 
-import com.bankingsystem.core.dto.ChangePasswordRequest;
-import com.bankingsystem.core.dto.JwtResponse;
-import com.bankingsystem.core.dto.LoginRequest;
-import com.bankingsystem.core.dto.RegisterRequest;
+import com.bankingsystem.core.dto.*;
 import com.bankingsystem.core.entity.User;
 import com.bankingsystem.core.repository.PasswordResetTokenRepository;
 import com.bankingsystem.core.repository.UserRepository;
@@ -132,13 +129,14 @@ public class AuthController {
     }
 
     @PostMapping("/forgot-password")
-    public ResponseEntity<?> forgotPassword(@RequestParam("email") String email) {
-        resetService.initiateReset(email);
-        return ResponseEntity.ok("Reset email sent");
+    public ResponseEntity<?> forgotPassword(@Valid @RequestBody ForgotPasswordRequest req) {
+        resetService.initiateReset(req.getEmail());
+        return ResponseEntity.ok("If an account exists, a reset email has been sent");
     }
 
-    @GetMapping("/reset-password/{token}")
-    public ResponseEntity<?> resetPassword(@PathVariable String token) {
+
+    @GetMapping("/reset-password")
+    public ResponseEntity<?> resetPassword(@RequestParam("token") String token) {
         try {
             resetTokenRepository.findByToken(token).orElseThrow(() -> new IllegalArgumentException("Invalid token"));
         }catch (IllegalArgumentException e) {

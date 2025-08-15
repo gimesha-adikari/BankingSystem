@@ -4,15 +4,19 @@ import com.bankingsystem.core.entity.Account.AccountType;
 import java.math.BigDecimal;
 import java.util.UUID;
 
+import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.NotNull;
 import lombok.Getter;
 import lombok.Setter;
 
 @Getter
 @Setter
 public class AccountRequestDTO {
-    private String accountNumber;
+    @NotNull(message = "Account type is required")
     private AccountType accountType;
+    @NotNull(message = "Initial deposit is required") @DecimalMin(value = "0.00", message = "Initial deposit should be greater than 0")
     private BigDecimal initialDeposit;
+    @NotNull(message = "Branch ID is required")
     private Integer branchId;
 
 }

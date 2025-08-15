@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from "react";
 import Sidebar from "../../components/Sidebar";
 import InputField from "../../components/InputField";
 import SelectField from "../../components/SelectField";
-import { useAlert } from "../../contexts/AlertContext";
+import { useAlert } from "@/contexts/use-alert";
 
 type Gender = "MALE" | "FEMALE" | "OTHER";
 type Status = "ACTIVE" | "INACTIVE" | "PENDING";

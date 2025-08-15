@@ -2,7 +2,10 @@ package com.bankingsystem.core.controller;
 
 import com.bankingsystem.core.dto.AccountRequestDTO;
 import com.bankingsystem.core.dto.AccountResponseDTO;
+import com.bankingsystem.core.dto.TransactionResponseDTO;
 import com.bankingsystem.core.service.AccountService;
+import com.bankingsystem.core.service.TransactionQueryService;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -17,6 +20,7 @@ import java.util.UUID;
 public class AccountController {
 
     private final AccountService accountService;
+    private final TransactionQueryService transactionQueryService;
 
     @GetMapping
     @PreAuthorize("hasAnyRole('ADMIN','TELLER','MANAGER')")
@@ -26,15 +30,24 @@ public class AccountController {
 
     @PostMapping
     @PreAuthorize("hasAnyRole('CUSTOMER')")
-    public ResponseEntity<AccountResponseDTO> openAccount(@RequestBody AccountRequestDTO request) {
-        return ResponseEntity.status(201).body(accountService.openAccount(request,null));
+    public ResponseEntity<AccountResponseDTO> openAccount(@Valid @RequestBody AccountRequestDTO request) {
+        return ResponseEntity.status(201).body(accountService.openAccount(request, null));
     }
 
     @PostMapping("/{id}")
     @PreAuthorize("hasAnyRole('TELLER')")
-    public ResponseEntity<AccountResponseDTO> openAccountForCustomer(@RequestBody AccountRequestDTO request, @PathVariable UUID id) {
-        return ResponseEntity.status(201).body(accountService.openAccount(request,id));
+    public ResponseEntity<AccountResponseDTO> openAccountForCustomer(
+            @Valid @RequestBody AccountRequestDTO request,
+            @PathVariable UUID id) {
+        return ResponseEntity.status(201).body(accountService.openAccount(request, id));
     }
+
+    @GetMapping("/{id}/transactions")
+    @PreAuthorize("hasAnyRole('ADMIN','TELLER','MANAGER') or @securityService.isAccountOwner(authentication, #id)")
+    public ResponseEntity<List<TransactionResponseDTO>> getAccountTransactions(@PathVariable UUID id) {
+        return ResponseEntity.ok(transactionQueryService.getTransactionsForAccount(id));
+    }
+
 
     @GetMapping("/{id}")
     @PreAuthorize("hasAnyRole('ADMIN','TELLER','MANAGER') or @securityService.isAccountOwner(authentication, #id)")
@@ -44,7 +57,7 @@ public class AccountController {
 
     @PutMapping("/{id}")
     @PreAuthorize("hasAnyRole('ADMIN','TELLER','MANAGER')")
-    public ResponseEntity<AccountResponseDTO> updateAccount(@PathVariable UUID id, @RequestBody AccountRequestDTO request) {
+    public ResponseEntity<AccountResponseDTO> updateAccount(@PathVariable UUID id, @Valid @RequestBody AccountRequestDTO request) {
         return ResponseEntity.ok(accountService.updateAccount(id, request));
     }
 

@@ -1,3 +1,5 @@
+import React from "react";
+
 type Props = {
     children: React.ReactNode;
     type?: "button" | "submit" | "reset";
@@ -17,11 +19,12 @@ const Button = ({
         type={type}
         onClick={onClick}
         disabled={disabled}
-        className={`font-semibold py-2 px-4 rounded-lg shadow-md transition w-full
-      ${disabled
-            ? "bg-blue-300 cursor-not-allowed"
-            : "bg-blue-600 hover:bg-blue-700 text-white"}
-      ${className}`}
+        className={`w-full font-semibold py-2.5 px-5 rounded-lg shadow-sm transition-all duration-200
+            focus:outline-none focus:ring-2 focus:ring-offset-1
+            ${disabled
+            ? "bg-blue-300 text-white cursor-not-allowed"
+            : "bg-blue-600 hover:bg-blue-700 text-white focus:ring-blue-400"}
+            ${className}`}
     >
         {children}
     </button>

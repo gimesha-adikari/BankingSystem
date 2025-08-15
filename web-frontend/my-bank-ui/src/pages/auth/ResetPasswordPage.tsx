@@ -1,150 +1,212 @@
-import { useLocation, useNavigate } from "react-router-dom";
-import React, { useState, useEffect } from "react";
-import { usePasswordStrength } from "../../hooks/usePasswordStrength";
-import { useConfirmPasswordMatch } from "../../hooks/useConfirmPasswordMatch";
-import InputField from "../../components/InputField.tsx";
+import { useEffect, useMemo, useState } from "react";
+import { useSearchParams, Link, useNavigate } from "react-router-dom";
+import api from "@/api/axios";
+import InputField from "@/components/InputField";
+import { useAlert } from "@/contexts/use-alert";
 
-function useQuery() {
-    return new URLSearchParams(useLocation().search);
-}
-
-const ResetPasswordPage = () => {
-    const query = useQuery();
-    const token = query.get("token");
+export default function ResetPasswordPage() {
+    const [sp] = useSearchParams();
+    const token = sp.get("token")?.trim() ?? "";
     const navigate = useNavigate();
+    const { showAlert } = useAlert();
+
+    const [validating, setValidating] = useState(true);
+    const [tokenError, setTokenError] = useState<string | null>(null);
 
     const [newPassword, setNewPassword] = useState("");
-    const [confirmPassword, setConfirmPassword] = useState("");
-    const [message, setMessage] = useState<string | null>(null);
-    const [loading, setLoading] = useState(false);
-    const [submitted, setSubmitted] = useState(false);
+    const [confirm, setConfirm] = useState("");
+    const [submitting, setSubmitting] = useState(false);
+    const [done, setDone] = useState(false);
 
-    const { score: passwordScore, issues: passwordIssues } = usePasswordStrength(newPassword);
-    const passwordsMatch = useConfirmPasswordMatch(newPassword, confirmPassword);
+    const strengthError = useMemo(() => {
+        const pw = newPassword;
+        if (pw.length < 8) return "At least 8 characters required.";
+        if (!/[!@#$%^&*(),.?\":{}|<>]/.test(pw)) return "Include at least one special character.";
+        if (!/[0-9]/.test(pw)) return "Include at least one number.";
+        if (!/[A-Z]/.test(pw)) return "Include at least one uppercase letter.";
+        return null;
+    }, [newPassword]);
 
     useEffect(() => {
         if (!token) {
-            setMessage("Missing token in URL");
+            setTokenError("Missing reset token.");
+            setValidating(false);
             return;
         }
 
-        fetch(`/api/v1/auth/reset-password/${token}`)
-            .then(res => {
-                if (!res.ok) throw new Error("Invalid or expired token");
-                return res.text();
-            })
-            .then(msg => setMessage(msg))
-            .catch(err => setMessage(err.message));
+        (async () => {
+            try {
+                setValidating(true);
+                setTokenError(null);
+                await api.get("/api/v1/auth/reset-password", { params: { token } });
+            } catch (err: unknown) {
+                const msg = (err as { message?: string })?.message || "This reset link is invalid or has expired.";
+                setTokenError(msg);
+            } finally {
+                setValidating(false);
+            }
+        })();
     }, [token]);
 
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
+    const submit = async () => {
+        if (!token || validating || submitting) return;
 
-        if (!token) {
-            setMessage("Token missing");
+        if (strengthError) {
+            showAlert(strengthError, "error");
             return;
         }
-
-        if (passwordScore < 4) {
-            setMessage("Password is too weak");
+        if (newPassword !== confirm) {
+            showAlert("Passwords do not match.", "error");
             return;
         }
-
-        if (!passwordsMatch) {
-            setMessage("Passwords do not match");
-            return;
-        }
-
-        setLoading(true);
-        setMessage(null);
 
         try {
-            const response = await fetch(`/api/v1/auth/reset-password?token=${token}&newPassword=${encodeURIComponent(newPassword)}`, {
-                method: "POST",
+            setSubmitting(true);
+            await api.post("/api/v1/auth/reset-password", null, {
+                params: { token, newPassword },
             });
 
-            if (!response.ok) {
-                const errorText = await response.text();
-                throw new Error(errorText || "Password reset failed");
-            }
-
-            setSubmitted(true);
-            setMessage("Password has been reset. Redirecting to login...");
-            setTimeout(() => navigate("/login"), 3000);
-        } catch (err: any) {
-            setMessage(err.message);
+            setDone(true);
+            showAlert("Password has been reset. You can now sign in.", "success");
+        } catch (err: unknown) {
+            const msg =
+                (err as { message?: string })?.message ||
+                "Failed to reset password. The link may be invalid or expired.";
+            showAlert(msg, "error");
         } finally {
-            setLoading(false);
+            setSubmitting(false);
         }
     };
 
-    if (submitted) {
+    if (validating) {
         return (
-            <div className="flex items-center justify-center h-screen bg-gray-100">
-                <div className="bg-white p-6 rounded shadow text-center">
-                    <h2 className="text-xl font-semibold mb-4">Password Reset Successful</h2>
-                    <p>{message}</p>
+            <div className="min-h-screen grid place-items-center px-4 bg-[#0E1220] bg-[radial-gradient(70%_50%_at_50%_-10%,rgba(99,102,241,0.18),transparent)]">
+                <div className="max-w-md w-full rounded-2xl bg-white/90 backdrop-blur shadow-2xl ring-1 ring-black/5 p-8 motion-safe:animate-[fadeIn_.25s_ease-out]">
+                    <div className="h-6 w-40 rounded bg-slate-200 mb-4 animate-pulse" />
+                    <div className="space-y-3">
+                        <div className="h-4 w-full rounded bg-slate-200 animate-pulse" />
+                        <div className="h-4 w-5/6 rounded bg-slate-200 animate-pulse" />
+                        <div className="h-10 w-28 rounded bg-slate-200 mt-4 animate-pulse" />
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+    if (tokenError) {
+        return (
+            <div className="min-h-screen grid place-items-center px-4 bg-[#0E1220] bg-[radial-gradient(70%_50%_at_50%_-10%,rgba(99,102,241,0.18),transparent)]">
+                <div className="max-w-md w-full rounded-2xl bg-white/90 backdrop-blur shadow-2xl ring-1 ring-black/5 p-8 text-center motion-safe:animate-[riseIn_.28s_ease-out]">
+                    <h1 className="text-xl font-semibold text-slate-950 mb-2">Reset link issue</h1>
+                    <p className="text-slate-700">{tokenError}</p>
+                    <div className="mt-6">
+                        <Link
+                            to="/login"
+                            className="inline-flex items-center justify-center px-4 py-2 rounded-xl bg-indigo-600 text-white hover:bg-indigo-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 transition"
+                        >
+                            Back to Sign in
+                        </Link>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+    if (done) {
+        return (
+            <div className="min-h-screen grid place-items-center px-4 bg-[#0E1220] bg-[radial-gradient(70%_50%_at_50%_-10%,rgba(99,102,241,0.18),transparent)]">
+                <div className="max-w-md w-full rounded-2xl bg-white/90 backdrop-blur shadow-2xl ring-1 ring-black/5 p-8 text-center motion-safe:animate-[riseIn_.28s_ease-out]">
+                    <h1 className="text-xl font-semibold text-slate-950 mb-2">Password updated</h1>
+                    <p className="text-slate-700">You can now sign in with your new password.</p>
+                    <div className="mt-6 flex justify-center gap-2">
+                        <button
+                            onClick={() => navigate("/login")}
+                            className="px-4 py-2 rounded-xl bg-indigo-600 text-white hover:bg-indigo-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 transition"
+                        >
+                            Go to Sign in
+                        </button>
+                    </div>
                 </div>
             </div>
         );
     }
 
     return (
-        <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-blue-100 to-blue-300">
-            <form onSubmit={handleSubmit} className="bg-white p-8 rounded shadow-md w-full max-w-md">
-                <h2 className="text-2xl font-semibold mb-4 text-center">Reset Your Password</h2>
+        <div className="min-h-screen grid place-items-center px-4 bg-[#0E1220] bg-[radial-gradient(70%_50%_at_50%_-10%,rgba(99,102,241,0.18),transparent)]">
+            <div className="max-w-md w-full rounded-2xl bg-white/90 backdrop-blur shadow-2xl ring-1 ring-black/5 p-8 motion-safe:animate-[riseIn_.28s_ease-out]">
+                <h1 className="text-xl font-semibold text-slate-950">Set a new password</h1>
+                <p className="text-sm text-slate-700 mt-1">Your reset token was validated. Choose a strong password.</p>
 
-                {message && <div className="text-sm mb-4 text-red-600 text-center">{message}</div>}
-
-                <div className="mb-4">
+                <div className="mt-6 space-y-4">
                     <InputField
-                        label="New Password"
+                        label="New password"
                         type="password"
-                        name="password"
+                        name="newPassword"
                         value={newPassword}
                         onChange={(e) => setNewPassword(e.target.value)}
                         placeholder="••••••••"
+                        autoComplete="new-password"
+                        error={undefined}
+                        tone="light"
                     />
-                    {newPassword && (
-                        <ul className="text-sm mt-1 text-red-600 list-disc list-inside">
-                            {passwordIssues.length === 0
-                                ? <li className="text-green-600">Strong password!</li>
-                                : passwordIssues.map((issue, idx) => (
-                                    <li key={idx}>{issue}</li>
-                                ))
-                            }
-                        </ul>
-                    )}
-                </div>
-
-                <div className="mb-6">
                     <InputField
-                        label="Confirm Password"
+                        label="Confirm password"
                         type="password"
-                        name="password"
-                        value={confirmPassword}
-                        onChange={(e) => setConfirmPassword(e.target.value)}
+                        name="confirmPassword"
+                        value={confirm}
+                        onChange={(e) => setConfirm(e.target.value)}
                         placeholder="••••••••"
+                        autoComplete="new-password"
+                        error={undefined}
+                        tone="light"
                     />
-                    {confirmPassword && (
-                        <p className={`text-sm mt-1 ${
-                            passwordsMatch ? "text-green-600" : "text-red-600"
-                        }`}>
-                            {passwordsMatch ? "Passwords match" : "Passwords do not match"}
-                        </p>
-                    )}
-                </div>
 
-                <button
-                    type="submit"
-                    disabled={loading || passwordScore < 4 || !passwordsMatch}
-                    className="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700"
-                >
-                    {loading ? "Submitting..." : "Reset Password"}
-                </button>
-            </form>
+                    {strengthError ? (
+                        <p className="text-sm text-rose-600" role="alert" aria-live="polite">
+                            {strengthError}
+                        </p>
+                    ) : newPassword ? (
+                        <p className="text-sm text-emerald-600" aria-live="polite">
+                            Looks good.
+                        </p>
+                    ) : null}
+
+                    <div className="pt-2 flex justify-end gap-2">
+                        <Link
+                            to="/login"
+                            className="px-4 py-2 rounded-xl bg-slate-100 text-slate-800 hover:bg-slate-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 transition"
+                        >
+                            Cancel
+                        </Link>
+                        <button
+                            onClick={submit}
+                            disabled={submitting || !newPassword || !confirm || !!strengthError || newPassword !== confirm}
+                            className={[
+                                "px-4 py-2 rounded-xl text-white transition shadow-sm",
+                                "focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500",
+                                submitting || !newPassword || !confirm || !!strengthError || newPassword !== confirm
+                                    ? "bg-indigo-400 cursor-not-allowed"
+                                    : "bg-indigo-600 hover:bg-indigo-700",
+                            ].join(" ")}
+                        >
+                            {submitting ? "Saving…" : "Update password"}
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <style>
+                {`
+          @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(6px); }
+            to   { opacity: 1; transform: translateY(0); }
+          }
+          @keyframes riseIn {
+            from { opacity: 0; transform: translateY(8px) scale(0.99); }
+            to   { opacity: 1; transform: translateY(0) scale(1); }
+          }
+        `}
+            </style>
         </div>
     );
-};
-
-export default ResetPasswordPage;
+}

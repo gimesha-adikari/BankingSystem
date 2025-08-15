@@ -1,29 +1,47 @@
-import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
+import { Routes, Route } from "react-router-dom";
 import PublicRoutes from "./routes/PublicRoutes";
 import CustomerRoutes from "./routes/CustomerRoutes";
 import AdminRoutes from "./routes/AdminRoutes";
 import TellerRoutes from "./routes/TellerRoutes";
 import ManagerRoutes from "./routes/ManagerRoutes";
+import CommonEmployeeRoutes from "./routes/CommonEmployeeRoutes";
+import BankAccountCreation from "./pages/teller/BankAccountCreation";
+import AccountTransactionsRoute from "./routes/AppRoutes";
+import PrivateRoute from "@/routes/PrivateRoute";
 import Alert from "./components/Alert";
-import CommonEmployeeRoutes from "./routes/CommonEmployeeRoutes.tsx";
 
-const App = () => {
+export default function App() {
     return (
-        <Router>
+        <>
             <Alert />
             <Routes>
-                {/* Public routes */}
+                {/* public */}
                 <Route path="/*" element={<PublicRoutes />} />
 
-                {/* Protected routes grouped by role */}
-                <Route path="/employee/*" element={<CommonEmployeeRoutes />} />
-                <Route path="/customer/*" element={<CustomerRoutes />} />
-                <Route path="/admin/*" element={<AdminRoutes />} />
-                <Route path="/teller/*" element={<TellerRoutes />} />
-                <Route path="/manager/*" element={<ManagerRoutes />} />
-            </Routes>
-        </Router>
-    );
-};
+                {/* protected by role */}
+                <Route element={<PrivateRoute roles={["CUSTOMER"]} />}>
+                    <Route path="/customer/*" element={<CustomerRoutes />} />
+                </Route>
 
-export default App;
+                <Route element={<PrivateRoute roles={["ADMIN"]} />}>
+                    <Route path="/admin/*" element={<AdminRoutes />} />
+                </Route>
+
+                <Route element={<PrivateRoute roles={["TELLER"]} />}>
+                    <Route path="/teller/*" element={<TellerRoutes />} />
+                    <Route path="/accounts/new" element={<BankAccountCreation />} />
+                    <Route path="/accounts/:accountId/transactions" element={<AccountTransactionsRoute />} />
+                </Route>
+
+                <Route element={<PrivateRoute roles={["MANAGER"]} />}>
+                    <Route path="/manager/*" element={<ManagerRoutes />} />
+                </Route>
+
+                {/* shared employee section */}
+                <Route element={<PrivateRoute roles={["ADMIN","TELLER","MANAGER"]} />}>
+                    <Route path="/employee/*" element={<CommonEmployeeRoutes />} />
+                </Route>
+            </Routes>
+        </>
+    );
+}

@@ -1,9 +1,9 @@
 import { useState, useEffect, useMemo } from "react";
-import Sidebar from "../../components/Sidebar"; // common sidebar with role prop
-import InputField from "../../components/InputField";
-import SelectField from "../../components/SelectField";
-import { useAlert } from "../../contexts/AlertContext";
-import {useAuth} from "../../contexts/AuthContext.tsx";
+import Sidebar from "@/components/Sidebar";
+import InputField from "@/components/InputField";
+import SelectField from "@/components/SelectField";
+import { useAlert } from "@/contexts/use-alert";
+import { useAuth } from "@/contexts/auth-context.ts";
 
 type Gender = "MALE" | "FEMALE" | "OTHER";
 type Status = "ACTIVE" | "INACTIVE" | "PENDING";
@@ -78,7 +78,6 @@ const CustomerRegistration = () => {
 
     const { showAlert } = useAlert();
     const getAuthToken = () => localStorage.getItem("token");
-    const getRole = () => localStorage.getItem("role");
 
     const getAuthHeaders = () => {
         const token = getAuthToken();
@@ -88,15 +87,12 @@ const CustomerRegistration = () => {
         };
     };
 
-    // Helper to display friendly labels for enums in the UI
     const pretty = (val: string) => {
         if (!val) return "";
         return val.charAt(0).toUpperCase() + val.slice(1).toLowerCase();
     };
-    if (loading) {
-        return <div>Loading...</div>;
-    }
 
+    if (loading) return <div className="min-h-screen grid place-items-center text-indigo-100">Loading…</div>;
 
     useEffect(() => {
         if (debouncedUserSearch.length === 0 || debouncedUserSearch.length >= 3) {
@@ -111,12 +107,8 @@ const CustomerRegistration = () => {
                 credentials: "include",
             })
                 .then((res) => {
-                    if (res.status === 401 || res.status === 403) {
-                        throw new Error("Unauthorized. Please login again.");
-                    }
-                    if (!res.ok) {
-                        throw new Error(`Failed to fetch users: ${res.status}`);
-                    }
+                    if (res.status === 401 || res.status === 403) throw new Error("Unauthorized. Please login again.");
+                    if (!res.ok) throw new Error(`Failed to fetch users: ${res.status}`);
                     return res.json();
                 })
                 .then((data: User[]) => {
@@ -128,9 +120,7 @@ const CustomerRegistration = () => {
                     setLoadingUsers(false);
                 });
         } else {
-            if (debouncedUserSearch.length > 0 && debouncedUserSearch.length < 3) {
-                setUsers([]);
-            }
+            if (debouncedUserSearch.length > 0 && debouncedUserSearch.length < 3) setUsers([]);
         }
     }, [debouncedUserSearch]);
 
@@ -144,9 +134,7 @@ const CustomerRegistration = () => {
             credentials: "include",
         })
             .then((res) => {
-                if (res.status === 401 || res.status === 403) {
-                    throw new Error("Unauthorized. Please login again.");
-                }
+                if (res.status === 401 || res.status === 403) throw new Error("Unauthorized. Please login again.");
                 if (!res.ok) throw new Error(`Failed to fetch customers: ${res.status}`);
                 return res.json();
             })
@@ -164,56 +152,47 @@ const CustomerRegistration = () => {
     const filteredCustomers = useMemo(() => {
         const lowered = customerSearch.toLowerCase();
         return customers
-            .filter((c) => {
-                return (
-                    c.firstName.toLowerCase().includes(lowered) ||
-                    c.lastName.toLowerCase().includes(lowered) ||
-                    c.email.toLowerCase().includes(lowered)
-                );
-            })
+            .filter((c) => c.firstName.toLowerCase().includes(lowered) || c.lastName.toLowerCase().includes(lowered) || c.email.toLowerCase().includes(lowered))
             .slice(0, 5);
     }, [customerSearch, customers]);
 
     const filteredUsers = useMemo(() => users.slice(0, 5), [users]);
 
-    const onSelectUser = (user: User) => {
-        setSelectedUser(user);
+    const onSelectUser = (u: User) => {
+        setSelectedUser(u);
         setSelectedCustomer(null);
         setFormData({
-            userId: user.userId,
-            firstName: user.firstName,
-            lastName: user.lastName,
-            gender: user.gender,
-            email: user.email,
-            phone: user.phone,
-            address: user.address,
-            dateOfBirth: user.dateOfBirth,
-            status: user.status,
+            userId: u.userId,
+            firstName: u.firstName,
+            lastName: u.lastName,
+            gender: u.gender,
+            email: u.email,
+            phone: u.phone,
+            address: u.address,
+            dateOfBirth: u.dateOfBirth,
+            status: u.status,
         });
     };
 
-    const onSelectCustomer = (customer: Customer) => {
-        setSelectedCustomer(customer);
+    const onSelectCustomer = (c: Customer) => {
+        setSelectedCustomer(c);
         setSelectedUser(null);
         setFormData({
-            userId: customer.userId,
-            firstName: customer.firstName,
-            lastName: customer.lastName,
-            gender: customer.gender,
-            email: customer.email,
-            phone: customer.phone,
-            address: customer.address,
-            dateOfBirth: customer.dateOfBirth,
-            status: customer.status,
+            userId: c.userId,
+            firstName: c.firstName,
+            lastName: c.lastName,
+            gender: c.gender,
+            email: c.email,
+            phone: c.phone,
+            address: c.address,
+            dateOfBirth: c.dateOfBirth,
+            status: c.status,
         });
     };
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
         const { name, value } = e.target;
-        setFormData((prev) => ({
-            ...prev,
-            [name]: value,
-        } as unknown as User));
+        setFormData((prev) => ({ ...prev, [name]: value } as unknown as User));
     };
 
     const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -275,7 +254,6 @@ const CustomerRegistration = () => {
 
             showAlert("Customer saved successfully!", "success");
 
-            // Reset selections and form
             setSelectedCustomer(null);
             setSelectedUser(null);
             setFormData({
@@ -290,7 +268,6 @@ const CustomerRegistration = () => {
                 status: "ACTIVE",
             });
 
-            // Refresh customers list
             setLoadingCustomers(true);
             setErrorCustomers(null);
             const customersRes = await fetch("/api/v1/customers", {
@@ -311,252 +288,258 @@ const CustomerRegistration = () => {
     };
 
     return (
-        <div className="flex h-screen bg-gradient-to-b from-gray-600 to-gray-900">
-            {/* Sidebar with role prop if your Sidebar supports it */}
-            <Sidebar isOpen={sidebarOpen} role={user?.role ?? "GUEST"} />
+        <div className="flex h-screen text-indigo-100 bg-[#0B0B12] bg-[radial-gradient(70%_55%_at_50%_-10%,rgba(99,102,241,0.16),transparent)]">
+            <Sidebar isOpen={sidebarOpen} role={user?.role ?? "CUSTOMER"} />
 
             <div className="flex-1 flex flex-col relative">
-                {/* Mobile Top Bar */}
-                <header className="bg-gray-900 shadow-md py-4 px-6 flex justify-between items-center md:hidden">
-                    <button
-                        onClick={() => setSidebarOpen(!sidebarOpen)}
-                        className="text-indigo-400 text-2xl focus:outline-none"
-                        aria-label="Toggle sidebar"
-                    >
-                        ☰
-                    </button>
-                    <h1 className="text-lg font-semibold text-indigo-300">Customer Registration</h1>
+                <header className="md:hidden sticky top-0 z-40 bg-white/5 backdrop-blur ring-1 ring-white/10 py-3 px-4">
+                    <div className="flex justify-between items-center">
+                        <button
+                            onClick={() => setSidebarOpen(!sidebarOpen)}
+                            aria-label="Toggle sidebar"
+                            aria-expanded={sidebarOpen}
+                            className="h-9 w-9 grid place-items-center rounded-xl text-indigo-300 hover:text-white hover:bg-white/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 transition"
+                        >
+                            ☰
+                        </button>
+                        <h1 className="text-base font-semibold text-indigo-200">Customer Registration</h1>
+                    </div>
                 </header>
 
-                {/* Main Content */}
-                <main className="flex-1 p-6 overflow-auto text-indigo-100">
-                    {/* Close button */}
+                <main className="flex-1 px-6 py-6 md:px-8 md:py-8 overflow-auto">
                     <button
                         onClick={() => window.history.back()}
                         aria-label="Go back"
-                        className="absolute top-4 right-4 text-gray-300 hover:text-white rounded-full p-2 focus:outline-none focus:ring-2 focus:ring-indigo-400"
                         title="Go back"
+                        className="absolute top-4 right-4 rounded-full p-2 text-indigo-200 hover:text-white hover:bg-white/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 transition"
                     >
-                        <svg
-                            xmlns="http://www.w3.org/2000/svg"
-                            className="h-6 w-6"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
-                            strokeWidth={2}
-                        >
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 md:h-6 md:w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                             <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                         </svg>
                     </button>
 
-                    <h1 className="text-3xl font-bold mb-8 text-indigo-200">Customer Registration</h1>
+                    <h1 className="text-3xl md:text-4xl font-bold tracking-tight text-white">Customer Registration</h1>
 
-                    <div className="grid grid-cols-3 gap-8">
-                        {/* Left panel: Customers and Users */}
-                        <div className="col-span-1 space-y-8">
-                            {/* Customers */}
-                            <div>
-                                <h2 className="text-xl font-semibold mb-3 text-indigo-300">Customers</h2>
+                    <div className="mt-6 grid grid-cols-1 lg:grid-cols-3 gap-8">
+                        <div className="space-y-6 lg:col-span-1">
+                            <div className="rounded-2xl ring-1 ring-white/10 bg-white/5 backdrop-blur p-4 md:p-5 shadow-sm">
+                                <h2 className="text-lg font-semibold text-white mb-3">Customers</h2>
                                 <input
                                     type="text"
                                     placeholder="Search customers by name or email"
                                     value={customerSearch}
                                     onChange={(e) => setCustomerSearch(e.target.value)}
-                                    className="w-full mb-2 px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-indigo-400 bg-gray-700 text-indigo-100 border-gray-600"
+                                    className="w-full mb-3 px-3 py-2 rounded-lg bg-white text-slate-900 placeholder:text-slate-400 ring-1 ring-slate-300 focus:ring-2 focus:ring-indigo-500 outline-none"
                                 />
 
-                                {loadingCustomers && <p className="text-center text-gray-400 p-2">Loading customers...</p>}
-                                {errorCustomers && <p className="text-center text-red-500 p-2">{errorCustomers}</p>}
+                                {loadingCustomers && <p className="text-center text-indigo-300/80 p-2" aria-live="polite">Loading customers…</p>}
+                                {errorCustomers && <p className="text-center text-rose-400 p-2">{errorCustomers}</p>}
 
                                 {!loadingCustomers && !errorCustomers && (
-                                    <table className="w-full border-collapse border border-gray-600 text-sm text-indigo-100">
-                                        <thead>
-                                        <tr className="bg-indigo-900">
-                                            <th className="border border-gray-600 px-2 py-1 text-left">Name</th>
-                                            <th className="border border-gray-600 px-2 py-1 text-left">Email</th>
-                                            <th className="border border-gray-600 px-2 py-1 text-left">Status</th>
-                                        </tr>
-                                        </thead>
-                                        <tbody>
-                                        {filteredCustomers.length === 0 && (
+                                    <div className="overflow-hidden rounded-xl ring-1 ring-white/10">
+                                        <table className="w-full text-sm">
+                                            <thead className="bg-white/10 text-indigo-100 sticky top-0">
                                             <tr>
-                                                <td colSpan={3} className="text-center p-2 text-gray-500">
-                                                    No customers found.
-                                                </td>
+                                                <th className="px-3 py-2 text-left font-medium">Name</th>
+                                                <th className="px-3 py-2 text-left font-medium">Email</th>
+                                                <th className="px-3 py-2 text-left font-medium">Status</th>
                                             </tr>
-                                        )}
-                                        {filteredCustomers.map((cust) => (
-                                            <tr
-                                                key={cust.customerId}
-                                                onClick={() => onSelectCustomer(cust)}
-                                                className={`cursor-pointer hover:bg-indigo-700 ${
-                                                    selectedCustomer?.customerId === cust.customerId ? "bg-indigo-800 font-semibold" : ""
-                                                }`}
-                                            >
-                                                <td className="border border-gray-600 px-2 py-1">
-                                                    {cust.firstName} {cust.lastName}
-                                                </td>
-                                                <td className="border border-gray-600 px-2 py-1">{cust.email}</td>
-                                                <td className="border border-gray-600 px-2 py-1">{pretty(cust.status)}</td>
-                                            </tr>
-                                        ))}
-                                        </tbody>
-                                    </table>
+                                            </thead>
+                                            <tbody className="divide-y divide-white/10">
+                                            {filteredCustomers.length === 0 && (
+                                                <tr>
+                                                    <td colSpan={3} className="px-3 py-3 text-center text-indigo-300/80 italic">No customers found.</td>
+                                                </tr>
+                                            )}
+                                            {filteredCustomers.map((cust) => (
+                                                <tr
+                                                    key={cust.customerId}
+                                                    onClick={() => onSelectCustomer(cust)}
+                                                    className={[
+                                                        "cursor-pointer transition",
+                                                        selectedCustomer?.customerId === cust.customerId ? "bg-indigo-500/10" : "hover:bg-white/5",
+                                                    ].join(" ")}
+                                                >
+                                                    <td className="px-3 py-2">{cust.firstName} {cust.lastName}</td>
+                                                    <td className="px-3 py-2">{cust.email}</td>
+                                                    <td className="px-3 py-2">{pretty(cust.status)}</td>
+                                                </tr>
+                                            ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
                                 )}
                             </div>
 
-                            {/* Users */}
-                            <div>
-                                <h2 className="text-xl font-semibold mb-3 text-indigo-300">Users</h2>
+                            <div className="rounded-2xl ring-1 ring-white/10 bg-white/5 backdrop-blur p-4 md:p-5 shadow-sm">
+                                <h2 className="text-lg font-semibold text-white mb-3">Users</h2>
                                 <input
                                     type="text"
                                     placeholder="Search users by name or email (min 3 chars)"
                                     value={userSearch}
                                     onChange={(e) => setUserSearch(e.target.value)}
-                                    className="w-full mb-2 px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-indigo-400 bg-gray-700 text-indigo-100 border-gray-600"
+                                    className="w-full mb-3 px-3 py-2 rounded-lg bg-white text-slate-900 placeholder:text-slate-400 ring-1 ring-slate-300 focus:ring-2 focus:ring-indigo-500 outline-none"
                                 />
 
-                                {loadingUsers && <p className="text-center text-gray-400 p-2">Loading users...</p>}
-                                {errorUsers && <p className="text-center text-red-500 p-2">{errorUsers}</p>}
+                                {loadingUsers && <p className="text-center text-indigo-300/80 p-2" aria-live="polite">Loading users…</p>}
+                                {errorUsers && <p className="text-center text-rose-400 p-2">{errorUsers}</p>}
 
                                 {!loadingUsers && !errorUsers && (
-                                    <table className="w-full border-collapse border border-gray-600 text-sm text-indigo-100">
-                                        <thead>
-                                        <tr className="bg-indigo-900">
-                                            <th className="border border-gray-600 px-2 py-1 text-left">Name</th>
-                                            <th className="border border-gray-600 px-2 py-1 text-left">Email</th>
-                                            <th className="border border-gray-600 px-2 py-1 text-left">Status</th>
-                                        </tr>
-                                        </thead>
-                                        <tbody>
-                                        {filteredUsers.length === 0 && (
+                                    <div className="overflow-hidden rounded-xl ring-1 ring-white/10">
+                                        <table className="w-full text-sm">
+                                            <thead className="bg-white/10 text-indigo-100 sticky top-0">
                                             <tr>
-                                                <td colSpan={3} className="text-center p-2 text-gray-500">
-                                                    No users found.
-                                                </td>
+                                                <th className="px-3 py-2 text-left font-medium">Name</th>
+                                                <th className="px-3 py-2 text-left font-medium">Email</th>
+                                                <th className="px-3 py-2 text-left font-medium">Status</th>
                                             </tr>
-                                        )}
-                                        {filteredUsers.map((user) => (
-                                            <tr
-                                                key={user.userId}
-                                                onClick={() => onSelectUser(user)}
-                                                className={`cursor-pointer hover:bg-indigo-700 ${
-                                                    selectedUser?.userId === user.userId ? "bg-indigo-800 font-semibold" : ""
-                                                }`}
-                                            >
-                                                <td className="border border-gray-600 px-2 py-1">
-                                                    {user.firstName} {user.lastName}
-                                                </td>
-                                                <td className="border border-gray-600 px-2 py-1">{user.email}</td>
-                                                <td className="border border-gray-600 px-2 py-1">{pretty(user.status)}</td>
-                                            </tr>
-                                        ))}
-                                        </tbody>
-                                    </table>
+                                            </thead>
+                                            <tbody className="divide-y divide-white/10">
+                                            {filteredUsers.length === 0 && (
+                                                <tr>
+                                                    <td colSpan={3} className="px-3 py-3 text-center text-indigo-300/80 italic">No users found.</td>
+                                                </tr>
+                                            )}
+                                            {filteredUsers.map((u) => (
+                                                <tr
+                                                    key={u.userId}
+                                                    onClick={() => onSelectUser(u)}
+                                                    className={[
+                                                        "cursor-pointer transition",
+                                                        selectedUser?.userId === u.userId ? "bg-indigo-500/10" : "hover:bg-white/5",
+                                                    ].join(" ")}
+                                                >
+                                                    <td className="px-3 py-2">{u.firstName} {u.lastName}</td>
+                                                    <td className="px-3 py-2">{u.email}</td>
+                                                    <td className="px-3 py-2">{pretty(u.status)}</td>
+                                                </tr>
+                                            ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
                                 )}
                             </div>
                         </div>
 
-                        {/* Right panel: Form */}
-                        <div className="col-span-2 bg-gray-800 p-8 rounded-lg shadow-lg text-indigo-100">
-                            <h2 className="text-2xl font-semibold mb-6">Customer / User Details</h2>
-                            <form onSubmit={handleSubmit}>
-                                <div className="grid grid-cols-2 gap-6">
-                                    <InputField
-                                        label="First Name"
-                                        type="text"
-                                        name="firstName"
-                                        value={formData.firstName ?? ""}
-                                        onChange={handleChange}
-                                        placeholder="Enter first name"
-                                    />
+                        <div className="lg:col-span-2">
+                            <div className="rounded-2xl ring-1 ring-white/10 bg-white/5 backdrop-blur p-6 md:p-8 shadow-sm">
+                                <h2 className="text-2xl font-semibold text-white mb-6">Customer / User Details</h2>
 
-                                    <InputField
-                                        label="Last Name"
-                                        type="text"
-                                        name="lastName"
-                                        value={formData.lastName ?? ""}
-                                        onChange={handleChange}
-                                        placeholder="Enter last name"
-                                    />
-
-                                    <SelectField
-                                        label="Gender"
-                                        name="gender"
-                                        value={formData.gender ?? ""}
-                                        onChange={handleChange}
-                                        placeholder="Select gender"
-                                        options={[
-                                            { value: "MALE", label: "Male" },
-                                            { value: "FEMALE", label: "Female" },
-                                            { value: "OTHER", label: "Other" },
-                                        ]}
-                                    />
-
-                                    <SelectField
-                                        label="Status"
-                                        name="status"
-                                        value={formData.status ?? ""}
-                                        onChange={handleChange}
-                                        placeholder="Select status"
-                                        options={[
-                                            { value: "ACTIVE", label: "Active" },
-                                            { value: "INACTIVE", label: "Inactive" },
-                                            { value: "PENDING", label: "Pending" },
-                                        ]}
-                                    />
-
-                                    <InputField
-                                        label="Email"
-                                        type="email"
-                                        name="email"
-                                        value={formData.email ?? ""}
-                                        onChange={handleChange}
-                                        placeholder="Enter email"
-                                    />
-
-                                    <InputField
-                                        label="Phone"
-                                        type="tel"
-                                        name="phone"
-                                        value={formData.phone ?? ""}
-                                        onChange={handleChange}
-                                        placeholder="Enter phone number"
-                                    />
-
-                                    <div className="col-span-2">
+                                <form onSubmit={handleSubmit} className="space-y-6">
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                         <InputField
-                                            label="Address"
+                                            label="First Name"
                                             type="text"
-                                            name="address"
-                                            value={formData.address ?? ""}
+                                            name="firstName"
+                                            value={formData.firstName ?? ""}
                                             onChange={handleChange}
-                                            placeholder="Enter address"
+                                            placeholder="Enter first name"
+                                            tone="light"
+                                        />
+
+                                        <InputField
+                                            label="Last Name"
+                                            type="text"
+                                            name="lastName"
+                                            value={formData.lastName ?? ""}
+                                            onChange={handleChange}
+                                            placeholder="Enter last name"
+                                            tone="light"
+                                        />
+
+                                        <SelectField
+                                            label="Gender"
+                                            name="gender"
+                                            value={formData.gender ?? ""}
+                                            onChange={handleChange}
+                                            placeholder="Select gender"
+                                            options={[
+                                                { value: "MALE", label: "Male" },
+                                                { value: "FEMALE", label: "Female" },
+                                                { value: "OTHER", label: "Other" },
+                                            ]}
+                                            tone="light"
+                                        />
+
+                                        <SelectField
+                                            label="Status"
+                                            name="status"
+                                            value={formData.status ?? ""}
+                                            onChange={handleChange}
+                                            placeholder="Select status"
+                                            options={[
+                                                { value: "ACTIVE", label: "Active" },
+                                                { value: "INACTIVE", label: "Inactive" },
+                                                { value: "PENDING", label: "Pending" },
+                                            ]}
+                                            tone="light"
+                                        />
+
+                                        <InputField
+                                            label="Email"
+                                            type="email"
+                                            name="email"
+                                            value={formData.email ?? ""}
+                                            onChange={handleChange}
+                                            placeholder="Enter email"
+                                            tone="light"
+                                        />
+
+                                        <InputField
+                                            label="Phone"
+                                            type="tel"
+                                            name="phone"
+                                            value={formData.phone ?? ""}
+                                            onChange={handleChange}
+                                            placeholder="Enter phone number"
+                                            tone="light"
+                                        />
+
+                                        <div className="md:col-span-2">
+                                            <InputField
+                                                label="Address"
+                                                type="text"
+                                                name="address"
+                                                value={formData.address ?? ""}
+                                                onChange={handleChange}
+                                                placeholder="Enter address"
+                                                tone="light"
+                                            />
+                                        </div>
+
+                                        <InputField
+                                            label="Date of Birth"
+                                            type="date"
+                                            name="dateOfBirth"
+                                            value={formData.dateOfBirth ?? ""}
+                                            onChange={handleChange}
+                                            tone="light"
                                         />
                                     </div>
 
-                                    <InputField
-                                        label="Date of Birth"
-                                        type="date"
-                                        name="dateOfBirth"
-                                        value={formData.dateOfBirth ?? ""}
-                                        onChange={handleChange}
-                                    />
-                                </div>
-
-                                <div className="mt-6">
-                                    <button
-                                        type="submit"
-                                        className="bg-indigo-600 text-white px-6 py-2 rounded-lg hover:bg-indigo-700 transition"
-                                    >
-                                        Save Customer
-                                    </button>
-                                </div>
-                            </form>
+                                    <div className="flex justify-end">
+                                        <button
+                                            type="submit"
+                                            className="inline-flex items-center justify-center rounded-xl px-5 py-2.5 bg-indigo-600 text-white hover:bg-indigo-700 transition shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+                                        >
+                                            Save Customer
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
                         </div>
                     </div>
                 </main>
             </div>
+
+            <style>
+                {`
+          @keyframes riseIn {
+            from { opacity: 0; transform: translateY(8px) scale(0.99); }
+            to   { opacity: 1; transform: translateY(0) scale(1); }
+          }
+        `}
+            </style>
         </div>
     );
 };

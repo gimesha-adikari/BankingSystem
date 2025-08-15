@@ -1,16 +1,19 @@
-import {StrictMode} from 'react'
-import {createRoot} from 'react-dom/client'
-import './index.css'
-import App from './App.tsx'
-import {AlertProvider} from "./contexts/AlertContext";
-import {AuthProvider} from "./contexts/AuthContext";
+import React from "react";
+import {createRoot} from "react-dom/client";
+import { BrowserRouter } from "react-router-dom";
+import App from "./App";
+import AuthProvider from "@/contexts/AuthProvider";
+import AlertProvider from "@/contexts/AlertProvider.tsx";
+import "@/index.css";
 
-createRoot(document.getElementById('root')!).render(
-    <StrictMode>
+createRoot(document.getElementById("root")!).render(
+    <React.StrictMode>
         <AuthProvider>
             <AlertProvider>
-                <App/>
+                <BrowserRouter>
+                    <App />
+                </BrowserRouter>
             </AlertProvider>
         </AuthProvider>
-    </StrictMode>,
-)
+    </React.StrictMode>
+);

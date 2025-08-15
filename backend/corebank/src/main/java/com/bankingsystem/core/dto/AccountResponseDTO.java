@@ -2,6 +2,7 @@ package com.bankingsystem.core.dto;
 
 import com.bankingsystem.core.entity.Account.AccountStatus;
 import com.bankingsystem.core.entity.Account.AccountType;
+import com.fasterxml.jackson.annotation.JsonFormat;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -13,7 +14,9 @@ public class AccountResponseDTO {
     private AccountType accountType;
     private AccountStatus accountStatus;
     private BigDecimal balance;
+    @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd'T'HH:mm:ss")
     private LocalDateTime createdAt;
+    @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd'T'HH:mm:ss")
     private LocalDateTime updatedAt;
 
 

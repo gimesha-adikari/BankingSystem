@@ -5,30 +5,44 @@ const GetsStarted = () => {
     const navigate = useNavigate();
 
     useEffect(() => {
-        const token = localStorage.getItem("token"); // Adjust based on your actual storage
-        if (token) {
-            navigate("/customer/home");
-        }
+        const token = localStorage.getItem("token");
+        if (token) navigate("/customer/home");
     }, [navigate]);
 
     return (
-        <div className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-br from-blue-100 to-blue-300 text-center px-4">
-            <h1 className="text-4xl font-bold mb-4 text-blue-800">Welcome to Our App</h1>
-            <p className="text-lg text-gray-700 mb-6">Please login or register to continue</p>
-            <div className="space-x-4">
-                <a
-                    href="/login"
-                    className="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700 transition"
-                >
-                    Login
-                </a>
-                <a
-                    href="/register"
-                    className="bg-green-600 text-white px-6 py-2 rounded hover:bg-green-700 transition"
-                >
-                    Register
-                </a>
+        <div className="min-h-screen grid place-items-center text-indigo-100 bg-[#0B0B12] bg-[radial-gradient(70%_55%_at_50%_-10%,rgba(99,102,241,0.16),transparent)] px-6">
+            <div className="w-full max-w-2xl rounded-3xl ring-1 ring-white/10 bg-white/5 backdrop-blur p-8 md:p-12 shadow-[0_10px_40px_rgba(0,0,0,0.35)] motion-safe:animate-[riseIn_.35s_ease-out] text-center">
+                <h1 className="text-4xl md:text-5xl font-extrabold tracking-tight text-white">
+                    Welcome to MyBank
+                </h1>
+                <p className="mt-3 text-base md:text-lg text-indigo-300/90">
+                    Please log in or create an account to continue.
+                </p>
+
+                <div className="mt-8 flex flex-col sm:flex-row items-stretch sm:items-center justify-center gap-3">
+                    <a
+                        href="/login"
+                        className="inline-flex items-center justify-center rounded-xl px-6 py-3 bg-indigo-600 text-white hover:bg-indigo-700 transition shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+                    >
+                        Login
+                    </a>
+                    <a
+                        href="/register"
+                        className="inline-flex items-center justify-center rounded-xl px-6 py-3 bg-emerald-600 text-white hover:bg-emerald-700 transition shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+                    >
+                        Register
+                    </a>
+                </div>
             </div>
+
+            <style>
+                {`
+          @keyframes riseIn {
+            from { opacity: 0; transform: translateY(8px) scale(0.99); }
+            to   { opacity: 1; transform: translateY(0) scale(1); }
+          }
+        `}
+            </style>
         </div>
     );
 };

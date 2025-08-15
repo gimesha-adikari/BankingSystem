@@ -1,101 +1,46 @@
 package com.bankingsystem.core.entity;
 
 import jakarta.persistence.*;
+import lombok.Getter;
+import lombok.Setter;
+
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
 @Entity
 @Table(name = "transactions")
+@Getter
+@Setter
 public class Transaction {
+
+    public enum TransactionType {
+        DEPOSIT, WITHDRAWAL, TRANSFER_IN, TRANSFER_OUT
+    }
 
     @Id
     @GeneratedValue
-    @Column(name = "transaction_id", columnDefinition = "BINARY(16)")
+    @Column(name = "transaction_id", updatable = false, nullable = false)
     private UUID transactionId;
 
-    @ManyToOne(fetch = FetchType.LAZY)
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "account_id", nullable = false)
     private Account account;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "transaction_type", nullable = false, length = 20)
-    private TransactionType transactionType;
+    @Column(name = "type", nullable = false, length = 20)
+    private TransactionType type;
 
-    @Column(name = "amount", nullable = false, precision = 19, scale = 4)
+    @Column(name = "amount", nullable = false, precision = 19, scale = 2)
     private BigDecimal amount;
 
-    @Column(name = "timestamp", nullable = false)
-    private LocalDateTime timestamp;
+    @Column(name = "balance_after", nullable = false, precision = 19, scale = 2)
+    private BigDecimal balanceAfter;
 
-    @Column(name = "reference_number", length = 100)
-    private String referenceNumber;
-
-    @Column(name = "description", columnDefinition = "TEXT")
+    @Column(name = "description", length = 255)
     private String description;
 
-    // Getters and setters
+    @Column(name = "created_at", nullable = false)
+    private LocalDateTime createdAt;
 
-    public UUID getTransactionId() {
-        return transactionId;
-    }
-
-    public void setTransactionId(UUID transactionId) {
-        this.transactionId = transactionId;
-    }
-
-    public Account getAccount() {
-        return account;
-    }
-
-    public void setAccount(Account account) {
-        this.account = account;
-    }
-
-    public TransactionType getTransactionType() {
-        return transactionType;
-    }
-
-    public void setTransactionType(TransactionType transactionType) {
-        this.transactionType = transactionType;
-    }
-
-    public BigDecimal getAmount() {
-        return amount;
-    }
-
-    public void setAmount(BigDecimal amount) {
-        this.amount = amount;
-    }
-
-    public LocalDateTime getTimestamp() {
-        return timestamp;
-    }
-
-    public void setTimestamp(LocalDateTime timestamp) {
-        this.timestamp = timestamp;
-    }
-
-    public String getReferenceNumber() {
-        return referenceNumber;
-    }
-
-    public void setReferenceNumber(String referenceNumber) {
-        this.referenceNumber = referenceNumber;
-    }
-
-    public String getDescription() {
-        return description;
-    }
-
-    public void setDescription(String description) {
-        this.description = description;
-    }
-
-    // Enum for TransactionType
-    public enum TransactionType {
-        DEPOSIT,
-        WITHDRAWAL,
-        TRANSFER
-    }
 }

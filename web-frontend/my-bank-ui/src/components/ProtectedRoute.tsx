@@ -1,28 +1,25 @@
-import { Navigate } from "react-router-dom";
-import { useAuth } from "../contexts/AuthContext";
-import {JSX} from "react";
+import { Navigate, useLocation } from "react-router-dom";
+import { useAuth } from "@/contexts/auth-context";
+import type { JSX } from "react";
+import type { Role } from "@/contexts/auth-context";
 
 interface ProtectedRouteProps {
     children: JSX.Element;
-    roles?: string[];
+    roles?: Role[];
 }
 
-const ProtectedRoute = ({ children, roles }: ProtectedRouteProps) => {
-    const { user, loading } = useAuth();
+export default function ProtectedRoute({ children, roles }: ProtectedRouteProps) {
+    const { user, loading, hasRole } = useAuth();
+    const location = useLocation();
 
     if (loading) {
         return <div className="text-center mt-10">Checking authentication...</div>;
     }
-
     if (!user) {
-        return <Navigate to="/login" />;
+        return <Navigate to="/login" replace state={{ from: location }} />;
     }
-
-    if (roles && !roles.includes(user.role)) {
-        return <Navigate to="/unauthorized" />;
+    if (roles && !hasRole(...roles)) {
+        return <Navigate to="/unauthorized" replace />;
     }
-
     return children;
-};
-
-export default ProtectedRoute;
+}

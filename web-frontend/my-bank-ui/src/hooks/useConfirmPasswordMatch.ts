@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { doPasswordsMatch } from "../utils/validationUtils";
+import { doPasswordsMatch } from "@/utils/validationUtils";
 
 export function useConfirmPasswordMatch(password: string, confirmPassword: string) {
     const [match, setMatch] = useState<boolean | null>(null);
