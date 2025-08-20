@@ -1,7 +1,6 @@
 package com.bankingsystem.core;
 
-import com.bankingsystem.core.service.impl.AccountServiceImpl;
-import jakarta.annotation.PostConstruct;
+import com.bankingsystem.core.features.accounts.application.impl.AccountServiceImpl;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.SpringApplication;

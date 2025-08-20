@@ -1,4 +1,3 @@
-// src/pages/auth/Login.tsx
 import React, { useState } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import InputField from "../../components/InputField";
