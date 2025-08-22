@@ -1,0 +1,9 @@
+<component name="libraryTable">
+  <library name="PublicSuffixDatabase.list">
+    <CLASSES>
+      <root url="jar://$PROJECT_DIR$/android-app/BankApp/app/build/intermediates/compressed_assets/debug/compressDebugAssets/out/assets/PublicSuffixDatabase.list.jar!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES />
+  </library>
+</component>

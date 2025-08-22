@@ -1,8 +1,8 @@
 package com.bankingsystem.core.features.accounts.interfaces.dto;
 
-import com.bankingsystem.core.features.accounts.domain.Account.AccountType;
 import java.math.BigDecimal;
 
+import com.bankingsystem.core.modules.common.enums.AccountType;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotNull;
 import lombok.Getter;

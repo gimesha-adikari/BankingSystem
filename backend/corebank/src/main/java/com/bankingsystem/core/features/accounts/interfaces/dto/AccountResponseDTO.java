@@ -1,7 +1,7 @@
 package com.bankingsystem.core.features.accounts.interfaces.dto;
 
-import com.bankingsystem.core.features.accounts.domain.Account.AccountStatus;
-import com.bankingsystem.core.features.accounts.domain.Account.AccountType;
+import com.bankingsystem.core.modules.common.enums.AccountStatus;
+import com.bankingsystem.core.modules.common.enums.AccountType;
 import com.fasterxml.jackson.annotation.JsonFormat;
 import lombok.Getter;
 import lombok.Setter;

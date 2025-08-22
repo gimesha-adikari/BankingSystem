@@ -12,5 +12,6 @@ public interface KycCaseService {
     KycCase submit(UUID userId, String docFrontId, String docBackId, String selfieId, String addressId);
     Optional<KycCase> getMyLatest(UUID userId);
     Page<KycCase> listByStatus(KycStatus status, Pageable pageable);
-    KycCase decide(String caseId, KycStatus target, String reason);
+    KycCase decide(String caseId, KycStatus target, String reason, UUID reviewerId);
+    KycCase markStatus(String caseId, KycStatus status, String note);
 }

@@ -1,11 +1,20 @@
 package com.bankingsystem.core.features.kyc.domain;
 
 import jakarta.persistence.*;
+import lombok.Getter;
+import lombok.Setter;
+
 import java.time.Instant;
 import java.util.UUID;
 
+@Getter
+@Setter
 @Entity
-@Table(name = "kyc_uploads")
+@Table(name = "kyc_uploads",
+        indexes = {
+                @Index(name = "idx_kyc_uploads_uploaded_by", columnList = "uploaded_by"),
+                @Index(name = "idx_kyc_uploads_created_at", columnList = "created_at")
+        })
 public class KycUpload {
 
     @Id
@@ -13,7 +22,7 @@ public class KycUpload {
     private UUID id;
 
     @Column(name = "type", nullable = false, length = 40)
-    private String type;
+    private String type; // DOC_FRONT, DOC_BACK, SELFIE, ADDRESS_PROOF
 
     @Column(name = "original_filename", length = 255)
     private String originalFilename;
@@ -44,25 +53,4 @@ public class KycUpload {
         if (id == null) id = UUID.randomUUID();
         if (createdAt == null) createdAt = Instant.now();
     }
-
-    public UUID getId() { return id; }
-    public void setId(UUID id) { this.id = id; }
-    public String getType() { return type; }
-    public void setType(String type) { this.type = type; }
-    public String getOriginalFilename() { return originalFilename; }
-    public void setOriginalFilename(String originalFilename) { this.originalFilename = originalFilename; }
-    public String getStoredFilename() { return storedFilename; }
-    public void setStoredFilename(String storedFilename) { this.storedFilename = storedFilename; }
-    public String getContentType() { return contentType; }
-    public void setContentType(String contentType) { this.contentType = contentType; }
-    public long getSizeBytes() { return sizeBytes; }
-    public void setSizeBytes(long sizeBytes) { this.sizeBytes = sizeBytes; }
-    public String getChecksumSha256() { return checksumSha256; }
-    public void setChecksumSha256(String checksumSha256) { this.checksumSha256 = checksumSha256; }
-    public String getStoragePath() { return storagePath; }
-    public void setStoragePath(String storagePath) { this.storagePath = storagePath; }
-    public UUID getUploadedBy() { return uploadedBy; }
-    public void setUploadedBy(UUID uploadedBy) { this.uploadedBy = uploadedBy; }
-    public Instant getCreatedAt() { return createdAt; }
-    public void setCreatedAt(Instant createdAt) { this.createdAt = createdAt; }
 }

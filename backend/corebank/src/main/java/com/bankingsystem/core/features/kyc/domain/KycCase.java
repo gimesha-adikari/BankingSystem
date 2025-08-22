@@ -14,7 +14,8 @@ import java.util.UUID;
 @Table(name = "kyc_cases",
         indexes = {
                 @Index(name = "idx_kyc_cases_user_id", columnList = "user_id"),
-                @Index(name = "idx_kyc_cases_status", columnList = "status")
+                @Index(name = "idx_kyc_cases_status", columnList = "status"),
+                @Index(name = "idx_kyc_cases_user_created", columnList = "user_id,created_at")
         })
 public class KycCase {
 
@@ -49,6 +50,20 @@ public class KycCase {
 
     @Column(length = 500)
     private String decisionReason;
+
+    @Version
+    private long version;
+
+    @Column(name = "reviewed_by", columnDefinition = "BINARY(16)")
+    private UUID reviewedBy;
+
+    private Instant decidedAt;
+
+    @Column(length = 1000)
+    private String reviewerNotes;
+
+    @Column(name = "processing", nullable = false)
+    private boolean processing = false;
 
     @PrePersist
     public void prePersist() {

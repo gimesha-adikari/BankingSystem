@@ -7,6 +7,8 @@ import com.bankingsystem.core.features.branch.domain.Branch;
 import com.bankingsystem.core.features.customer.domain.Customer;
 import com.bankingsystem.core.features.transactions.domain.Transaction;
 import com.bankingsystem.core.features.auth.domain.User;
+import com.bankingsystem.core.modules.common.enums.AccountStatus;
+import com.bankingsystem.core.modules.common.enums.AccountType;
 import com.bankingsystem.core.modules.common.exceptions.BusinessException;
 import com.bankingsystem.core.modules.common.exceptions.ResourceNotFoundException;
 import com.bankingsystem.core.features.accounts.domain.repository.AccountRepository;
@@ -42,10 +44,10 @@ public class AccountServiceImpl implements AccountService {
     private static final int ACCOUNT_NUMBER_LENGTH = 10;
     private static final int MAX_RETRIES = 10;
 
-    private static final Map<Account.AccountType, BigDecimal> MIN_DEPOSIT = Map.of(
-            Account.AccountType.SAVINGS, new BigDecimal("1000.00"),
-            Account.AccountType.CHECKING, new BigDecimal("0.00"),
-            Account.AccountType.FIXED_DEPOSIT, new BigDecimal("5000.00")
+    private static final Map<AccountType, BigDecimal> MIN_DEPOSIT = Map.of(
+            AccountType.SAVINGS, new BigDecimal("1000.00"),
+            AccountType.CHECKING, new BigDecimal("0.00"),
+            AccountType.FIXED_DEPOSIT, new BigDecimal("5000.00")
     );
 
     @Override
@@ -97,7 +99,7 @@ public class AccountServiceImpl implements AccountService {
         Account account = new Account();
         account.setAccountNumber(generateUniqueAccountNumber());
         account.setAccountType(request.getAccountType());
-        account.setAccountStatus(Account.AccountStatus.ACTIVE);
+        account.setAccountStatus(AccountStatus.ACTIVE);
         account.setBalance(deposit);
         account.setCustomer(customer);
         account.setBranch(branch);
@@ -142,13 +144,13 @@ public class AccountServiceImpl implements AccountService {
     public void closeAccount(UUID accountId) {
         Account account = accountRepository.findById(accountId)
                 .orElseThrow(() -> new ResourceNotFoundException("Account not found"));
-        account.setAccountStatus(Account.AccountStatus.CLOSED);
+        account.setAccountStatus(AccountStatus.CLOSED);
         account.setUpdatedAt(LocalDateTime.now());
         accountRepository.save(account);
     }
 
     @Override
-    public AccountResponseDTO changeAccountStatus(UUID accountId, Account.AccountStatus status) {
+    public AccountResponseDTO changeAccountStatus(UUID accountId, AccountStatus status) {
         Account account = accountRepository.findById(accountId)
                 .orElseThrow(() -> new ResourceNotFoundException("Account not found"));
         account.setAccountStatus(status);

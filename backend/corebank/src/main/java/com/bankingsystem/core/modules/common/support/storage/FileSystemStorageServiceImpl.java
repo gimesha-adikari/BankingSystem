@@ -11,8 +11,10 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.file.*;
 import java.security.MessageDigest;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.HexFormat;
+import java.util.Optional;
 import java.util.UUID;
 
 @Service
@@ -67,12 +69,33 @@ public class FileSystemStorageServiceImpl implements FileStorageService {
             u.setChecksumSha256(hex);
             u.setStoragePath(target.toString());
             u.setUploadedBy(uploadedBy);
+            u.setCreatedAt(Instant.now());
 
             repo.save(u);
             return new StoredUpload(id);
         } catch (Exception e) {
             throw new RuntimeException("Failed to store file", e);
         }
+    }
+
+    @Override
+    public byte[] read(UUID id) {
+        try {
+            Optional<KycUpload> opt = repo.findById(id);
+            KycUpload u = opt.orElseThrow(() -> new IllegalArgumentException("Upload not found: " + id));
+            Path path = Paths.get(u.getStoragePath());
+            return Files.readAllBytes(path);
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to read file bytes for " + id, e);
+        }
+    }
+
+    @Override
+    public void delete(UUID id) {
+        repo.findById(id).ifPresent(u -> {
+            try { Files.deleteIfExists(Path.of(u.getStoragePath())); } catch (Exception ignore) {}
+            repo.deleteById(id);
+        });
     }
 
     private static String extensionFrom(MultipartFile f) {

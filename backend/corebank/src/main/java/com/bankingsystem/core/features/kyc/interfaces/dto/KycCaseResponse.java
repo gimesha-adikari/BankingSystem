@@ -3,7 +3,11 @@ package com.bankingsystem.core.features.kyc.interfaces.dto;
 import com.bankingsystem.core.features.kyc.domain.KycCase;
 
 import java.time.Instant;
+import lombok.Getter;
+import lombok.Setter;
 
+@Getter
+@Setter
 public class KycCaseResponse {
     private String caseId;
     private String status;
@@ -14,6 +18,9 @@ public class KycCaseResponse {
     private String decisionReason;
     private Instant createdAt;
     private Instant updatedAt;
+    private String reviewerId;
+    private Instant decidedAt;
+    private String reviewerNotes;
 
     public static KycCaseResponse from(KycCase c) {
         KycCaseResponse r = new KycCaseResponse();
@@ -26,25 +33,9 @@ public class KycCaseResponse {
         r.decisionReason = c.getDecisionReason();
         r.createdAt = c.getCreatedAt();
         r.updatedAt = c.getUpdatedAt();
+        r.reviewerId = c.getReviewedBy() != null ? c.getReviewedBy().toString() : null;
+        r.decidedAt = c.getDecidedAt();
+        r.reviewerNotes = c.getReviewerNotes();
         return r;
     }
-
-    public String getCaseId() { return caseId; }
-    public void setCaseId(String caseId) { this.caseId = caseId; }
-    public String getStatus() { return status; }
-    public void setStatus(String status) { this.status = status; }
-    public String getDocFrontId() { return docFrontId; }
-    public void setDocFrontId(String docFrontId) { this.docFrontId = docFrontId; }
-    public String getDocBackId() { return docBackId; }
-    public void setDocBackId(String docBackId) { this.docBackId = docBackId; }
-    public String getSelfieId() { return selfieId; }
-    public void setSelfieId(String selfieId) { this.selfieId = selfieId; }
-    public String getAddressId() { return addressId; }
-    public void setAddressId(String addressId) { this.addressId = addressId; }
-    public String getDecisionReason() { return decisionReason; }
-    public void setDecisionReason(String decisionReason) { this.decisionReason = decisionReason; }
-    public Instant getCreatedAt() { return createdAt; }
-    public void setCreatedAt(Instant createdAt) { this.createdAt = createdAt; }
-    public Instant getUpdatedAt() { return updatedAt; }
-    public void setUpdatedAt(Instant updatedAt) { this.updatedAt = updatedAt; }
 }

@@ -3,6 +3,7 @@ package com.bankingsystem.core.features.accounts.application;
 import com.bankingsystem.core.features.accounts.interfaces.dto.AccountRequestDTO;
 import com.bankingsystem.core.features.accounts.interfaces.dto.AccountResponseDTO;
 import com.bankingsystem.core.features.accounts.domain.Account;
+import com.bankingsystem.core.modules.common.enums.AccountStatus;
 
 import java.util.List;
 import java.util.UUID;
@@ -21,7 +22,7 @@ public interface AccountService {
 
     void closeAccount(UUID accountId);
 
-    AccountResponseDTO changeAccountStatus(UUID accountId, Account.AccountStatus status);
+    AccountResponseDTO changeAccountStatus(UUID accountId, AccountStatus status);
 
     List<AccountResponseDTO> getAccountsForCurrentUser();
 }

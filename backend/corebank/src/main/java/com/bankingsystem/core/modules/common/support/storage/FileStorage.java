@@ -2,9 +2,14 @@ package com.bankingsystem.core.modules.common.support.storage;
 
 import com.bankingsystem.core.features.customer.domain.Customer;
 import jakarta.persistence.*;
+import lombok.Getter;
+import lombok.Setter;
+
 import java.time.LocalDateTime;
 import java.util.UUID;
 
+@Getter
+@Setter
 @Entity
 @Table(name = "file_storage")
 public class FileStorage {
@@ -25,80 +30,14 @@ public class FileStorage {
     private String fileType;
 
     @Column(name = "file_size")
-    private Integer fileSize;  // optional
+    private Integer fileSize;
 
     @Column(name = "checksum", length = 255)
-    private String checksum;  // optional
+    private String checksum;
 
     @Column(name = "file_path", nullable = false, length = 500)
     private String filePath;
 
     @Column(name = "uploaded_at", nullable = false)
     private LocalDateTime uploadedAt;
-
-    // Getters and setters
-
-    public UUID getFileId() {
-        return fileId;
-    }
-
-    public void setFileId(UUID fileId) {
-        this.fileId = fileId;
-    }
-
-    public Customer getCustomer() {
-        return customer;
-    }
-
-    public void setCustomer(Customer customer) {
-        this.customer = customer;
-    }
-
-    public String getFileName() {
-        return fileName;
-    }
-
-    public void setFileName(String fileName) {
-        this.fileName = fileName;
-    }
-
-    public String getFileType() {
-        return fileType;
-    }
-
-    public void setFileType(String fileType) {
-        this.fileType = fileType;
-    }
-
-    public Integer getFileSize() {
-        return fileSize;
-    }
-
-    public void setFileSize(Integer fileSize) {
-        this.fileSize = fileSize;
-    }
-
-    public String getChecksum() {
-        return checksum;
-    }
-
-    public void setChecksum(String checksum) {
-        this.checksum = checksum;
-    }
-
-    public String getFilePath() {
-        return filePath;
-    }
-
-    public void setFilePath(String filePath) {
-        this.filePath = filePath;
-    }
-
-    public LocalDateTime getUploadedAt() {
-        return uploadedAt;
-    }
-
-    public void setUploadedAt(LocalDateTime uploadedAt) {
-        this.uploadedAt = uploadedAt;
-    }
 }

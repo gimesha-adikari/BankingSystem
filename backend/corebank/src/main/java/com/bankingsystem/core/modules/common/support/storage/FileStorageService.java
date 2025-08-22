@@ -13,5 +13,11 @@ public interface FileStorageService {
         public String id() { return id.toString(); }
     }
 
+    /** Store a file uploaded by a user. */
     StoredUpload store(MultipartFile file, String type, UUID uploadedBy);
+
+    /** INTERNAL: Read bytes for a stored upload by its UUID. */
+    byte[] read(UUID id);
+
+    void delete(UUID id);
 }
