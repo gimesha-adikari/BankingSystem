@@ -29,7 +29,6 @@ public class KycCaseServiceImpl implements KycCaseService {
     @Override
     @Transactional
     public KycCase submit(UUID userId, String docFrontId, String docBackId, String selfieId, String addressId) {
-        // Parse & basic ownership
         List<UUID> ids = Arrays.asList(
                 UUID.fromString(docFrontId),
                 UUID.fromString(docBackId),
@@ -55,7 +54,8 @@ public class KycCaseServiceImpl implements KycCaseService {
         requireType(byId, UUID.fromString(addressId), "ADDRESS_PROOF", "addressId");
 
         List<KycStatus> active = Arrays.asList(
-                KycStatus.PENDING, KycStatus.AUTO_REVIEW, KycStatus.UNDER_REVIEW, KycStatus.NEEDS_MORE_INFO
+                KycStatus.PENDING, KycStatus.AUTO_REVIEW, KycStatus.NEEDS_MORE_INFO
+//               , KycStatus.UNDER_REVIEW
         );
         KycCase existingActive = cases.findFirstByUserIdAndStatusInOrderByCreatedAtDesc(userId, active).orElse(null);
 

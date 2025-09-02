@@ -10,5 +10,5 @@
     </list>
   </component>
   <component name="ExternalStorageConfigurationManager" enabled="true" />
-  <component name="ProjectRootManager" version="2" project-jdk-name="bank-ai" project-jdk-type="Python SDK" />
+  <component name="ProjectRootManager" version="2" languageLevel="JDK_24" project-jdk-name="21 (WSL)" project-jdk-type="JavaSDK" />
 </project>

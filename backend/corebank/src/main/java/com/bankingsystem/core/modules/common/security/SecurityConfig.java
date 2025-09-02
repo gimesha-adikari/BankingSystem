@@ -39,6 +39,10 @@ public class SecurityConfig {
                                 "/api/v1/auth/reset-password",
                                 "/api/v1/users/me/email/verify",
                                 "/api/v1/auth/reset-password/**",
+                                "/api/v1/wallet/payhere/**",
+                                "/favicon.ico",
+                                "/favicon.svg",
+                                "/favicon.png",
                                 "/error").permitAll()
                         .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
                         .requestMatchers("/api/v1/customer/**").hasRole("CUSTOMER")

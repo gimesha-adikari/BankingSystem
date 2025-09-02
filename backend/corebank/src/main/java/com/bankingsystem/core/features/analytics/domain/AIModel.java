@@ -35,8 +35,6 @@ public class AIModel {
     @Column(name = "last_trained_at")
     private LocalDateTime lastTrainedAt;
 
-    // Getters and setters
-
     public UUID getAiModelId() {
         return aiModelId;
     }

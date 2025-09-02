@@ -27,7 +27,7 @@ import org.slf4j.LoggerFactory;
 public class KycAutoReviewOrchestratorImpl implements KycAutoReviewOrchestrator {
 
     private static final Logger log = LoggerFactory.getLogger(KycAutoReviewOrchestratorImpl.class);
-    private static final UUID SYSTEM_REVIEWER = new UUID(0L, 0L); // 0000... as "SYSTEM"
+    private static final UUID SYSTEM_REVIEWER = new UUID(0L, 0L);
 
     private final KycCaseRepository cases;
     private final KycCheckRepository checks;
@@ -55,7 +55,6 @@ public class KycAutoReviewOrchestratorImpl implements KycAutoReviewOrchestrator 
         this.mapper = mapper;
     }
 
-    /** Runs every 10s; processes up to 50 oldest eligible cases. */
     @Override
     @Scheduled(fixedDelayString = "${kyc.auto-review.fixed-delay-ms:10000}")
     @Transactional
@@ -81,17 +80,15 @@ public class KycAutoReviewOrchestratorImpl implements KycAutoReviewOrchestrator 
         }
     }
 
-
     @Override
     @Transactional
     public KycCase run(String caseId) {
         KycCase c = cases.findById(caseId)
                 .orElseThrow(() -> new IllegalArgumentException("Case not found: " + caseId));
 
-        // If not already claimed, try to claim now (covers direct/manual invocations)
         if (!c.isProcessing()) {
             if (cases.tryMarkProcessing(c.getId()) != 1) {
-                return c; // someone else is handling it
+                return c;
             }
             c.setProcessing(true);
         }
@@ -106,41 +103,48 @@ public class KycAutoReviewOrchestratorImpl implements KycAutoReviewOrchestrator 
             }
         }
 
-        // build base64 payloads (as you had)
         String selfieB64 = readB64(c.getSelfieId());
         String frontB64  = readB64(c.getDocFrontId());
         String backB64   = readB64(c.getDocBackId());
+        String billB64   = readB64(c.getAddressId());
+
         MlKycClient.KycAggregateRequest req = new MlKycClient.KycAggregateRequest(
-                selfieB64, null, frontB64, backB64, Map.of()
+                selfieB64, null, frontB64, backB64, billB64,
+                Map.of("caseId", c.getId())
         );
 
         try {
             var res = ml.aggregate(req);
 
             if (res.body != null && res.body.checks != null) {
-                Instant now = Instant.now();
-                for (var chk : res.body.checks) {
+                for (var ch : res.body.checks) {
                     KycCheck k = new KycCheck();
                     k.setCaseId(c.getId());
-                    k.setType(chk.type);
-                    k.setScore(chk.score);
-                    k.setPassed(chk.passed);
-                    k.setDetailsJson(toJsonSafe(chk.details));
-                    k.setCreatedAt(now);
+                    k.setType(ch.type);
+                    k.setScore(ch.score);
+                    k.setPassed(ch.passed);
+                    try {
+                        k.setDetailsJson(mapper.writeValueAsString(ch.details == null ? Map.of() : ch.details));
+                    } catch (Exception ex) {
+                        k.setDetailsJson("{}");
+                    }
+                    k.setCreatedAt(Instant.now());
                     checks.save(k);
                 }
             }
 
-            var reasons = new ArrayList<String>();
-            if (res.body != null && res.body.reasons != null) reasons.addAll(res.body.reasons);
-            String reasonStr = String.join(";", reasons);
-            String decision = (res.body != null && res.body.decision != null) ? res.body.decision : "UNDER_REVIEW";
-
-            switch (decision) {
-                case "APPROVE" -> caseService.decide(c.getId(), KycStatus.APPROVED, "Auto-approved by ML", SYSTEM_REVIEWER);
-                case "REJECT"  -> caseService.decide(c.getId(), KycStatus.REJECTED, reasonStr.isBlank() ? "Rejected by ML" : reasonStr, SYSTEM_REVIEWER);
-                default        -> caseService.markStatus(c.getId(), KycStatus.UNDER_REVIEW, reasonStr.isBlank() ? "Queued for human review" : reasonStr);
+            if (res.body != null && res.body.decision != null) {
+                switch (res.body.decision) {
+                    case "APPROVE" -> caseService.decide(c.getId(), KycStatus.APPROVED, "auto_approved", SYSTEM_REVIEWER);
+                    case "REJECT" -> caseService.decide(c.getId(), KycStatus.REJECTED,
+                            String.join(";", res.body.reasons == null ? List.of() : res.body.reasons), SYSTEM_REVIEWER);
+                    default -> caseService.markStatus(c.getId(), KycStatus.UNDER_REVIEW,
+                            String.join(";", res.body.reasons == null ? List.of() : res.body.reasons));
+                }
+            } else {
+                caseService.markStatus(c.getId(), KycStatus.UNDER_REVIEW, "ml_response_empty");
             }
+
         } catch (Exception ex) {
             KycCheck err = new KycCheck();
             err.setCaseId(c.getId());
@@ -153,7 +157,6 @@ public class KycAutoReviewOrchestratorImpl implements KycAutoReviewOrchestrator 
 
             caseService.markStatus(c.getId(), KycStatus.UNDER_REVIEW, "ml_unavailable");
         } finally {
-            // always release the claim
             cases.findById(caseId).ifPresent(k -> {
                 k.setProcessing(false);
                 cases.save(k);
@@ -163,28 +166,17 @@ public class KycAutoReviewOrchestratorImpl implements KycAutoReviewOrchestrator 
         return cases.findById(caseId).orElse(c);
     }
 
-
     private String readB64(String uuidStr) {
         if (uuidStr == null || uuidStr.isBlank()) return null;
         try {
             byte[] data = files.read(UUID.fromString(uuidStr));
             if (data == null || data.length == 0) return null;
-            if (data.length > 6 * 1024 * 1024) return null; // optional cap
+            if (data.length > 6 * 1024 * 1024) return null;
             return Base64.getEncoder().encodeToString(data);
         } catch (Exception e) {
             return null;
         }
     }
 
-    private String toJsonSafe(Map<String, Object> map) {
-        try {
-            return mapper.writeValueAsString(map == null ? Map.of() : map);
-        } catch (Exception e) {
-            return "{}";
-        }
-    }
-
-    private static String safe(String s) {
-        return s == null ? "" : s.replace("\"", "'");
-    }
+    private static String safe(String s) { return s == null ? "" : s.replace("\"", "'"); }
 }

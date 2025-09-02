@@ -60,7 +60,7 @@ public class KycCaseController {
 
         var existingActive = service.getMyLatest(userId)
                 .filter(c -> switch (c.getStatus()) {
-                    case PENDING, AUTO_REVIEW, UNDER_REVIEW, NEEDS_MORE_INFO -> true;
+//                    case PENDING, AUTO_REVIEW, UNDER_REVIEW, NEEDS_MORE_INFO -> true;
                     default -> false;
                 });
 

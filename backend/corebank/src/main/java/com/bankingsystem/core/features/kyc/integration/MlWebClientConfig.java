@@ -24,8 +24,8 @@ public class MlWebClientConfig {
     public WebClient mlWebClient() {
         String baseUrl = getenvOr("ML_BASE_URL", "http://127.0.0.1:8000");
         int connectMs = parseIntOr("ML_CONNECT_TIMEOUT_MS", 1000);
-        int readMs = parseIntOr("ML_READ_TIMEOUT_MS", 30000);
-        int maxMem = parseIntOr("ML_MAX_BODY_BYTES", 20 * 1024 * 1024); // 20MB
+        int readMs = parseIntOr("ML_READ_TIMEOUT_MS", 180000);
+        int maxMem = parseIntOr("ML_MAX_BODY_BYTES", 20 * 1024 * 1024);
 
         log.info("ML WebClient baseUrl={} connectMs={} readMs={} maxMem={}", baseUrl, connectMs, readMs, maxMem);
 

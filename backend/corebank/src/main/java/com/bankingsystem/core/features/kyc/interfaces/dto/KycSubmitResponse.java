@@ -1,16 +1,18 @@
 package com.bankingsystem.core.features.kyc.interfaces.dto;
 
+import lombok.Getter;
+import lombok.Setter;
+
+@Setter
+@Getter
 public class KycSubmitResponse {
-    private String status;   // e.g., PENDING
-    private String requestId;
+    private String status;
+    private String caseId;
 
     public KycSubmitResponse() {}
-    public KycSubmitResponse(String status, String requestId) {
+    public KycSubmitResponse(String status, String caseId) {
         this.status = status;
-        this.requestId = requestId;
+        this.caseId = caseId;
     }
-    public String getStatus() { return status; }
-    public void setStatus(String status) { this.status = status; }
-    public String getRequestId() { return requestId; }
-    public void setRequestId(String requestId) { this.requestId = requestId; }
+
 }
