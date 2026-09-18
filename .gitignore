@@ -26,3 +26,16 @@ replay_pid*
 /backend/corebank/src/main/resources/application-prod.yml
 /backend/corebank/src/main/resources/application-dev.yml
 /storage/*
+
+# Local-only development configuration and generated runtime state.
+**/.env
+**/application-dev.yml
+**/.venv/
+**/calib/
+**/calib_test/
+**/models/**/*.onnx
+backend/corebank/storage/
+**/__pycache__/
+**/.pytest_cache/
+**/.idea/
+**/*.iml

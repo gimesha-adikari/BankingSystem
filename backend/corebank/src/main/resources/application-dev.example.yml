@@ -1,0 +1,86 @@
+spring:
+  datasource:
+    url: ${DB_URL:jdbc:mysql://127.0.0.1:3307/banking_system_dev?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC}
+    username: ${DB_USERNAME:banking_dev}
+    password: ${DB_PASSWORD:change-me-locally}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  jpa:
+    hibernate:
+      ddl-auto: ${JPA_DDL_AUTO:update}
+    show-sql: ${JPA_SHOW_SQL:false}
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MySQLDialect
+  mail:
+    host: ${MAIL_HOST:127.0.0.1}
+    port: ${MAIL_PORT:1025}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: ${MAIL_SMTP_AUTH:false}
+          starttls:
+            enable: ${MAIL_SMTP_STARTTLS:false}
+
+server:
+  address: ${SERVER_ADDRESS:127.0.0.1}
+  port: ${SERVER_PORT:8080}
+  error:
+    include-message: always
+
+jwt:
+  secret: ${JWT_SECRET:local-development-secret-change-me-before-sharing}
+  expirationMs: ${JWT_EXPIRATION_MS:86400000}
+
+app:
+  token:
+    expiration-hours: ${APP_TOKEN_EXPIRATION_HOURS:24}
+  defaultAdmin:
+    username: ${DEFAULT_ADMIN_USERNAME:admin}
+    email: ${DEFAULT_ADMIN_EMAIL:admin@example.test}
+    password: ${DEFAULT_ADMIN_PASSWORD:ChangeMe1!}
+  defaultCustomer:
+    username: ${DEFAULT_CUSTOMER_USERNAME:customer}
+    email: ${DEFAULT_CUSTOMER_EMAIL:customer@example.test}
+    password: ${DEFAULT_CUSTOMER_PASSWORD:ChangeMe1!}
+  defaultTeller:
+    username: ${DEFAULT_TELLER_USERNAME:teller}
+    email: ${DEFAULT_TELLER_EMAIL:teller@example.test}
+    password: ${DEFAULT_TELLER_PASSWORD:ChangeMe1!}
+  defaultManager:
+    username: ${DEFAULT_MANAGER_USERNAME:manager}
+    email: ${DEFAULT_MANAGER_EMAIL:manager@example.test}
+    password: ${DEFAULT_MANAGER_PASSWORD:ChangeMe1!}
+  base-url: ${APP_BASE_URL:http://127.0.0.1:8080}
+  frontend-url: ${APP_FRONTEND_URL:http://127.0.0.1:5173}
+  mail:
+    from: ${APP_MAIL_FROM:no-reply@example.test}
+  brand:
+    name: ${APP_BRAND_NAME:MyBank Local}
+
+ml:
+  base-url: ${ML_BASE_URL:http://127.0.0.1:8000}
+  connect-timeout-ms: ${ML_CONNECT_TIMEOUT_MS:1000}
+  read-timeout-ms: ${ML_READ_TIMEOUT_MS:180000}
+  max-body-bytes: ${ML_MAX_BODY_BYTES:20971520}
+
+kyc:
+  storage:
+    root: ${KYC_STORAGE_ROOT:./storage/kyc}
+  auto-review:
+    fixed-delay-ms: ${KYC_AUTO_REVIEW_DELAY_MS:60000}
+
+payhere:
+  merchant-id: ${PAYHERE_MERCHANT_ID:local-sandbox}
+  merchant-secret: ${PAYHERE_MERCHANT_SECRET:local-only}
+  sandbox: ${PAYHERE_SANDBOX:true}
+  server-base-url: ${PAYHERE_SERVER_BASE_URL:http://127.0.0.1:8080}
+  app-deeplink: ${PAYHERE_APP_DEEPLINK:mybank://wallet/return}
+  app-card-deeplink: ${PAYHERE_APP_CARD_DEEPLINK:mybank://wallet/card/return}
+
+# Retained property names observed in the older local wallet configuration.
+# The current PayHereProperties class uses the payhere.* block above.
+wallet:
+  PAYHERE_API_KEY: ${PAYHERE_API_KEY:local-only}
+  PAYHERE_API_SECRET: ${PAYHERE_API_SECRET:local-only}
