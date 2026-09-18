@@ -1,4 +1,4 @@
-import React, { ReactNode } from "react";
+import type { FC, ReactNode } from "react";
 import Header from "./Header";
 import Footer from "./Footer";
 
@@ -6,7 +6,7 @@ type HomeLayoutProps = {
     children: ReactNode;
 };
 
-const HomeLayout: React.FC<HomeLayoutProps> = ({ children }) => {
+const HomeLayout: FC<HomeLayoutProps> = ({ children }) => {
     return (
         <div className="min-h-screen flex flex-col bg-gray-600 text-gray-800">
             <Header />

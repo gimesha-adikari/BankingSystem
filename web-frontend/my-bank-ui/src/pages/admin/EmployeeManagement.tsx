@@ -27,7 +27,7 @@ const Login: React.FC = () => {
     const { showAlert } = useAlert();
     const { login } = useAuth();
 
-    const stateFrom = (location.state as any)?.from?.pathname as string | undefined;
+    const stateFrom = (location.state as { from?: { pathname?: string } } | null)?.from?.pathname;
     const qsFrom = new URLSearchParams(location.search).get("from") || undefined;
     const fromAfterLogin = stateFrom || qsFrom;
 

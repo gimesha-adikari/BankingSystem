@@ -21,7 +21,7 @@ export default function ResetPasswordPage() {
     const strengthError = useMemo(() => {
         const pw = newPassword;
         if (pw.length < 8) return "At least 8 characters required.";
-        if (!/[!@#$%^&*(),.?\":{}|<>]/.test(pw)) return "Include at least one special character.";
+        if (!/[!@#$%^&*(),.?":{}|<>]/.test(pw)) return "Include at least one special character.";
         if (!/[0-9]/.test(pw)) return "Include at least one number.";
         if (!/[A-Z]/.test(pw)) return "Include at least one uppercase letter.";
         return null;

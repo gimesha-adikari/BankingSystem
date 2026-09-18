@@ -1,7 +1,7 @@
 import { NavLink, useNavigate, useLocation } from "react-router-dom";
-import axios from "axios";
+import api from "@/api/axios";
 import { cn } from "@/utils/cn";
-import React, { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 
 type Role = "ADMIN" | "CUSTOMER" | "TELLER" | "MANAGER";
 
@@ -60,13 +60,10 @@ const Sidebar = ({ isOpen, role }: SidebarProps) => {
         const token = localStorage.getItem("token");
         try {
             if (token) {
-                await axios.post(
-                    "/api/v1/auth/logout",
-                    {},
-                    { headers: { Authorization: `Bearer ${token}` } }
-                );
+                await api.post("/api/v1/auth/logout", {});
             }
         } catch {
+            // Logout is best effort; local authentication state is cleared below.
         } finally {
             localStorage.removeItem("token");
             navigate("/login");

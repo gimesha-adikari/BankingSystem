@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { AuthContext, type AuthContextType, type Role, type User } from "./auth-context";
-
-const API_BASE = "";
+import api from "@/api/axios";
 
 export default function AuthProvider({ children }: { children: ReactNode }) {
     const [token, setToken] = useState<string | null>(() => localStorage.getItem("token"));
@@ -28,19 +27,17 @@ export default function AuthProvider({ children }: { children: ReactNode }) {
 
         inflightRef.current = (async () => {
             try {
-                const res = await fetch(`${API_BASE}/api/v1/auth/validate-token`, {
-                    headers: { Authorization: `Bearer ${token}` },
-                });
-                if (!res.ok) {
+                const res = await api.get<{ username: string; role: Role }>("/api/v1/auth/validate-token");
+                if (!res.data?.username || !res.data?.role) {
                     localStorage.removeItem("token");
                     setToken(null);
                     setUser(null);
                 } else {
-                    const data = (await res.json()) as { username: string; role: Role };
-                    setUser({ username: data.username, role: data.role });
+                    setUser({ username: res.data.username, role: res.data.role });
                 }
             } catch {
-                // keep token, clear user so we can retry later
+                localStorage.removeItem("token");
+                setToken(null);
                 setUser(null);
             } finally {
                 setBootstrapped(true);
@@ -77,10 +74,7 @@ export default function AuthProvider({ children }: { children: ReactNode }) {
             const revoke = opts?.revoke !== false;
             try {
                 if (revoke && token) {
-                    await fetch(`${API_BASE}/api/v1/auth/logout`, {
-                        method: "POST",
-                        headers: { Authorization: `Bearer ${token}` },
-                    }).catch(() => {});
+                    await api.post("/api/v1/auth/logout", {}).catch(() => undefined);
                 }
             } finally {
                 localStorage.removeItem("token");
@@ -93,7 +87,11 @@ export default function AuthProvider({ children }: { children: ReactNode }) {
     );
 
     const getAuthHeaders = useCallback<AuthContextType["getAuthHeaders"]>(
-        () => (token ? { Authorization: `Bearer ${token}` } : {}),
+        () => {
+            const headers: Record<string, string> = {};
+            if (token) headers.Authorization = `Bearer ${token}`;
+            return headers;
+        },
         [token]
     );
 
@@ -107,6 +105,7 @@ export default function AuthProvider({ children }: { children: ReactNode }) {
             user,
             token,
             loading: !bootstrapped,
+            bootstrapped,
             isAuthenticated,
             login,
             logout,

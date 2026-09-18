@@ -1,15 +1,4 @@
-import axios from "axios";
-
-const axiosInstance = axios.create({
-    baseURL: "http://localhost:8080/api/v1",
-});
-
-axiosInstance.interceptors.request.use((config) => {
-    const token = localStorage.getItem("token");
-    if (token) {
-        config.headers.Authorization = `Bearer ${token}`;
-    }
-    return config;
-});
-
-export default axiosInstance;
+// Compatibility import for older callers. The application has one configured
+// Axios instance so base URLs and error/token handling cannot drift by page.
+export { default } from "@/api/axios";
+export type { NormalizedError } from "@/api/axios";

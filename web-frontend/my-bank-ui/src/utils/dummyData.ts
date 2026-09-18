@@ -1,4 +1,25 @@
-const dummyCustomers: Customer[] = [
+type DummyGender = "Male" | "Female" | "Other";
+type DummyStatus = "Active" | "Inactive" | "Pending";
+
+interface DummyUser {
+    userId: string;
+    firstName: string;
+    lastName: string;
+    gender: DummyGender;
+    email: string;
+    phone: string;
+    address: string;
+    dateOfBirth: string;
+    status: DummyStatus;
+}
+
+interface DummyCustomer {
+    customerId: string;
+    user: DummyUser;
+    createdAt: string;
+}
+
+const dummyCustomers: DummyCustomer[] = [
     {
         customerId: "cust001",
         user: {
@@ -32,7 +53,7 @@ const dummyCustomers: Customer[] = [
     // Add more as needed
 ];
 
-const dummyUsers: User[] = [
+const dummyUsers: DummyUser[] = [
     {
         userId: "u002",
         firstName: "Jane",

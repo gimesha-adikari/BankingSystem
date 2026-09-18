@@ -4,6 +4,7 @@ import InputField from "@/components/InputField";
 import SelectField from "@/components/SelectField";
 import { useAlert } from "@/contexts/use-alert";
 import { useAuth } from "@/contexts/auth-context.ts";
+import api from "@/api/axios";
 
 type Gender = "MALE" | "FEMALE" | "OTHER";
 type Status = "ACTIVE" | "INACTIVE" | "PENDING";
@@ -77,22 +78,11 @@ const CustomerRegistration = () => {
     const debouncedUserSearch = useDebounce(userSearch, 500);
 
     const { showAlert } = useAlert();
-    const getAuthToken = () => localStorage.getItem("token");
-
-    const getAuthHeaders = () => {
-        const token = getAuthToken();
-        return {
-            "Content-Type": "application/json",
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        };
-    };
 
     const pretty = (val: string) => {
         if (!val) return "";
         return val.charAt(0).toUpperCase() + val.slice(1).toLowerCase();
     };
-
-    if (loading) return <div className="min-h-screen grid place-items-center text-indigo-100">Loading…</div>;
 
     useEffect(() => {
         if (debouncedUserSearch.length === 0 || debouncedUserSearch.length >= 3) {
@@ -101,22 +91,15 @@ const CustomerRegistration = () => {
 
             const query = debouncedUserSearch ? `?search=${encodeURIComponent(debouncedUserSearch)}` : "";
 
-            fetch(`/api/v1/users/all${query}`, {
-                method: "GET",
-                headers: getAuthHeaders(),
-                credentials: "include",
-            })
+            api
+                .get<User[]>(`/api/v1/users/all${query}`)
                 .then((res) => {
-                    if (res.status === 401 || res.status === 403) throw new Error("Unauthorized. Please login again.");
-                    if (!res.ok) throw new Error(`Failed to fetch users: ${res.status}`);
-                    return res.json();
-                })
-                .then((data: User[]) => {
-                    setUsers(data);
+                    setUsers(res.data);
                     setLoadingUsers(false);
                 })
-                .catch((e) => {
-                    setErrorUsers(e.message || "Failed to load users.");
+                .catch((error: unknown) => {
+                    const message = error instanceof Error ? error.message : "Failed to load users.";
+                    setErrorUsers(message);
                     setLoadingUsers(false);
                 });
         } else {
@@ -128,26 +111,19 @@ const CustomerRegistration = () => {
         setLoadingCustomers(true);
         setErrorCustomers(null);
 
-        fetch("/api/v1/customers", {
-            method: "GET",
-            headers: getAuthHeaders(),
-            credentials: "include",
-        })
+        api
+            .get<Customer[]>("/api/v1/customers")
             .then((res) => {
-                if (res.status === 401 || res.status === 403) throw new Error("Unauthorized. Please login again.");
-                if (!res.ok) throw new Error(`Failed to fetch customers: ${res.status}`);
-                return res.json();
-            })
-            .then((data: Customer[]) => {
-                setCustomers(data);
+                setCustomers(res.data);
                 setLoadingCustomers(false);
             })
-            .catch((e) => {
-                setErrorCustomers(e.message || "Failed to load customers.");
-                showAlert(e.message || "Failed to load customers.");
+            .catch((error: unknown) => {
+                const message = error instanceof Error ? error.message : "Failed to load customers.";
+                setErrorCustomers(message);
+                showAlert(message);
                 setLoadingCustomers(false);
             });
-    }, []);
+    }, [showAlert]);
 
     const filteredCustomers = useMemo(() => {
         const lowered = customerSearch.toLowerCase();
@@ -190,7 +166,12 @@ const CustomerRegistration = () => {
         });
     };
 
-    const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const { name, value } = e.target;
+        setFormData((prev) => ({ ...prev, [name]: value } as unknown as User));
+    };
+
+    const handleSelectChange = (e: { target: { name: string; value: string } }) => {
         const { name, value } = e.target;
         setFormData((prev) => ({ ...prev, [name]: value } as unknown as User));
     };
@@ -239,17 +220,10 @@ const CustomerRegistration = () => {
             const method = selectedCustomer ? "PUT" : "POST";
             const url = "/api/v1/customers";
 
-            const response = await fetch(url, {
-                method,
-                headers: getAuthHeaders(),
-                credentials: "include",
-                body: JSON.stringify(formData),
-            });
-
-            if (!response.ok) {
-                const errorData = await response.json().catch(() => null);
-                showAlert(`Failed to save customer: ${errorData?.message || response.statusText || "Unknown error"}`);
-                return;
+            if (method === "PUT") {
+                await api.put(url, formData);
+            } else {
+                await api.post(url, formData);
             }
 
             showAlert("Customer saved successfully!", "success");
@@ -270,22 +244,16 @@ const CustomerRegistration = () => {
 
             setLoadingCustomers(true);
             setErrorCustomers(null);
-            const customersRes = await fetch("/api/v1/customers", {
-                method: "GET",
-                headers: getAuthHeaders(),
-                credentials: "include",
-            });
-            if (customersRes.ok) {
-                const customersData = await customersRes.json();
-                setCustomers(customersData);
-            } else {
-                setErrorCustomers("Failed to refresh customers list.");
-            }
+            const customersRes = await api.get<Customer[]>("/api/v1/customers");
+            setCustomers(customersRes.data);
             setLoadingCustomers(false);
-        } catch (error: any) {
-            showAlert("An error occurred while saving: " + (error?.message || "Unknown error"));
+        } catch (error: unknown) {
+            const message = error instanceof Error ? error.message : "Unknown error";
+            showAlert("An error occurred while saving: " + message);
         }
     };
+
+    if (loading) return <div className="min-h-screen grid place-items-center text-indigo-100">Loading…</div>;
 
     return (
         <div className="flex h-screen text-indigo-100 bg-[#0B0B12] bg-[radial-gradient(70%_55%_at_50%_-10%,rgba(99,102,241,0.16),transparent)]">
@@ -432,7 +400,7 @@ const CustomerRegistration = () => {
                                             type="text"
                                             name="firstName"
                                             value={formData.firstName ?? ""}
-                                            onChange={handleChange}
+                                            onChange={handleSelectChange}
                                             placeholder="Enter first name"
                                             tone="light"
                                         />
@@ -442,7 +410,7 @@ const CustomerRegistration = () => {
                                             type="text"
                                             name="lastName"
                                             value={formData.lastName ?? ""}
-                                            onChange={handleChange}
+                                            onChange={handleSelectChange}
                                             placeholder="Enter last name"
                                             tone="light"
                                         />
@@ -451,7 +419,7 @@ const CustomerRegistration = () => {
                                             label="Gender"
                                             name="gender"
                                             value={formData.gender ?? ""}
-                                            onChange={handleChange}
+                                            onChange={handleSelectChange}
                                             placeholder="Select gender"
                                             options={[
                                                 { value: "MALE", label: "Male" },
@@ -465,7 +433,7 @@ const CustomerRegistration = () => {
                                             label="Status"
                                             name="status"
                                             value={formData.status ?? ""}
-                                            onChange={handleChange}
+                                            onChange={handleSelectChange}
                                             placeholder="Select status"
                                             options={[
                                                 { value: "ACTIVE", label: "Active" },

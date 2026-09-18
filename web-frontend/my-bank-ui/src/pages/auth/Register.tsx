@@ -47,7 +47,11 @@ const Register = () => {
         }
 
         try {
-            const { confirmPassword, ...dataToSend } = formData;
+            const dataToSend = {
+                username: formData.username,
+                email: formData.email,
+                password: formData.password,
+            };
 
             const response = await fetch("/api/v1/auth/register", {
                 method: "POST",
