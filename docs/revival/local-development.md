@@ -17,8 +17,8 @@ production deployment guide.
 
 - Java 21, Gradle wrapper 8.14.3 and Spring Boot 3.4.8.
 - Python 3.11 is the intended AI runtime. The checked-in `environment.yml`
-  records the tested Conda-family versions; `requirements-portable.txt` is the
-  pip-compatible definition for environments without Conda.
+  records the tested Conda-family versions; `requirements.txt` now delegates to
+  the portable pip-compatible definition for environments without Conda.
 - Node/npm versions should be recorded by the developer running the frontend;
   install from the committed `package-lock.json` with `npm ci`.
 - Android uses the versions in `android-app/BankApp/gradle/libs.versions.toml`.
