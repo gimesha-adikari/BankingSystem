@@ -99,6 +99,25 @@ public class AuthServiceImpl implements AuthService {
         emailService.sendVerificationEmail(user.getEmail(), token);
     }
 
+    @Override
+    @Transactional
+    public void resendVerification(String email) {
+        String normalizedEmail = email == null ? "" : email.trim();
+        Optional<User> userOpt = userRepository.findByEmail(normalizedEmail);
+        if (userOpt.isEmpty()) return;
+
+        User user = userOpt.get();
+        if (Boolean.TRUE.equals(user.getIsActive()) || user.isEmailVerified()) return;
+
+        String token = UUID.randomUUID().toString();
+        VerificationToken verificationToken = tokenRepository.findByUser(user).orElseGet(VerificationToken::new);
+        verificationToken.setToken(token);
+        verificationToken.setUser(user);
+        verificationToken.setExpiryDate(LocalDateTime.now().plusHours(appProperties.getToken().getExpirationHours()));
+        tokenRepository.save(verificationToken);
+        emailService.sendVerificationEmail(user.getEmail(), token);
+    }
+
     public boolean verifyEmail(String token) {
         VerificationToken verificationToken = tokenRepository.findByToken(token)
                 .orElseThrow(() -> new RuntimeException("Invalid verification token"));

@@ -163,8 +163,9 @@ public class AuthController {
     }
 
     @PostMapping("/resend-verification")
-    public ResponseEntity<?> resendVerification(@RequestBody Object request) {
-        return ResponseEntity.ok("Resend verification email endpoint hit");
+    public ResponseEntity<?> resendVerification(@Valid @RequestBody ForgotPasswordRequest request) {
+        authService.resendVerification(request.getEmail());
+        return ResponseEntity.ok("If an account exists, a verification email has been sent");
     }
 
     @GetMapping("/validate-token")

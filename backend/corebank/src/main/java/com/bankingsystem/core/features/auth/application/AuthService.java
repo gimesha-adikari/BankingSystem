@@ -5,6 +5,7 @@ import com.bankingsystem.core.features.auth.interfaces.dto.RegisterRequest;
 
 public interface AuthService {
     void register(RegisterRequest request);
+    void resendVerification(String email);
     boolean verifyEmail(String token);
     void createSession(String token, String username, String ipAddress);
     void logout(String token);
