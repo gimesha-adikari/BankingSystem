@@ -20,7 +20,7 @@ Multi-Platform Banking System is a full-stack monorepo for retail-banking workfl
 
 ### 1) Clone the repo
 ```bash
-git clone https://github.com/<your-username>/banking-system.git
+git clone https://github.com/gimesha-adikari/banking-system.git
 cd banking-system
 ```
 
