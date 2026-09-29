@@ -98,10 +98,12 @@ public class WalletServiceImpl implements WalletService {
 
     @Override
     public PaymentIntentDto getPaymentIntent(Authentication auth, String intentId) {
-        currentUser.requireUserId(auth);
-        PaymentIntent p = intents.findById(intentId).orElseThrow();
+        UUID userId = currentUser.requireUserId(auth);
+        PaymentIntent p = intents.findByIdAndUserId(intentId, userId)
+                .orElseThrow(() -> new com.bankingsystem.core.modules.common.exceptions.ResourceNotFoundException("Payment intent not found"));
         return PaymentIntentDto.from(p);
     }
+
 
     private PaymentIntentDto createIntent(Authentication auth, PaymentType type, AmountDto amt, String description) {
         UUID userId = currentUser.requireUserId(auth);
