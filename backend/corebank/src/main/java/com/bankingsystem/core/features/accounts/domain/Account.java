@@ -42,6 +42,9 @@ public class Account {
     @Column(name = "balance", nullable = false, precision = 19, scale = 4)
     private BigDecimal balance;
 
+    @Column(name = "currency", nullable = false, length = 3)
+    private String currency = "LKR";
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "customer_id", nullable = false)
     private Customer customer;
