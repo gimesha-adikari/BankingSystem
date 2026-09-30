@@ -72,7 +72,7 @@ fi
 
 # Execute official Flyway baseline operation through Gradle JavaExec runner
 (
-  cd "$REPO_ROOT/backend/corebank"
+  cd "$REPO_ROOT"
   ./gradlew -q flywayBaseline --args="${GRADLE_ARGS[*]}"
 )
 

@@ -1,75 +1,64 @@
-![Project cover](docs/design/cover.png)
+# BankingSystem
 
-# Banking System
-#### Video Demo: (coming soon)
+Spring Boot core banking backend for the BankingSystem project. This repository
+owns the Java API, database migrations, ledger, workflows, authentication, and
+backend tests. The web client, AI/KYC service, and Android client are versioned
+in separate repositories.
 
-## Description
-Multi-Platform Banking System is a full-stack monorepo for retail-banking workflows. It includes a Spring Boot 3 (Java 21) core API with JWT authentication and role-based access, a React + Vite admin/web client, and a FastAPI microservice for KYC/verification. The system models accounts, customers, transactions, loans, and reporting, with clear separation of services and an emphasis on maintainability and production-ready expansion.
+## Related repositories
 
----
+- [bank-web](https://github.com/gimesha-adikari/bank-web) — React/Vite web client
+- [banking-service](https://github.com/gimesha-adikari/banking-service) — FastAPI AI/KYC service
+- [BankApp](https://github.com/gimesha-adikari/BankApp) — Android application
 
-## Technologies Used
-- Java 21, Spring Boot 3, Spring Security (JWT), JPA/Hibernate, MySQL
-- TypeScript, React (18/19), Vite, Tailwind CSS
-- Python 3, FastAPI, Uvicorn
-- OpenAPI/Swagger
+These clients and services communicate with this backend through configured HTTP
+endpoints. A sibling checkout is not required for backend compilation or tests.
 
----
+## Requirements
 
-## How to Run the Project
+- Java 21
+- MySQL 8.4 for the integration environment
+- SMTP sink configuration for email-dependent tests and local flows
+- Optional FastAPI service reachable through the configured `ML_BASE_URL`
 
-### 1) Clone the repo
+## Local configuration
+
+Copy the checked-in example configuration and provide only local sandbox values:
+
 ```bash
-git clone https://github.com/gimesha-adikari/banking-system.git
-cd banking-system
+cp src/main/resources/application-dev.example.yml src/main/resources/application-dev.yml
 ```
 
-### 2) Start the Core API (Spring Boot)
+Keep `application-dev.yml`, production configuration, credentials, and generated
+runtime state out of Git. Configure the AI/KYC service URL externally (for
+example with `ML_BASE_URL`); this repository does not read the AI service from a
+filesystem path.
+
+## Build and test
+
+Run from this repository root:
+
 ```bash
-cd server
-./mvnw spring-boot:run
-# or: ./gradlew bootRun
-# API at http://localhost:8080
+SPRING_CONFIG_ADDITIONAL_LOCATION="classpath:/application-dev.example.yml" \
+DB_URL="jdbc:mysql://127.0.0.1:3307/banking_system_dev?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC" \
+DB_USERNAME="banking_dev" \
+DB_PASSWORD="change-me-locally" \
+MAIL_HOST="127.0.0.1" \
+MAIL_PORT="1025" \
+ML_BASE_URL="http://127.0.0.1:8000" \
+bash ./gradlew clean test
 ```
 
-### 3) Start the Web App (React + Vite)
-```bash
-cd web
-npm install
-npm run dev
-# Web at http://localhost:5173
-```
+The Gradle wrapper is the authoritative build entry point. Integration tests
+require the configured MySQL and local service dependencies.
 
-### 4) Start the AI/KYC Service (FastAPI)
-```bash
-cd ai-service
-python -m venv .venv && source .venv/bin/activate  # Windows: .venv\Scripts\activate
-pip install -r requirements.txt
-uvicorn main:app --reload --port 8000
-# Service at http://localhost:8000
-```
+## Database migrations
 
-> Configure database and service URLs via `.env` files in each service (e.g., DB URL, JWT secret, API base URLs).
+Flyway migrations under `src/main/resources/db/migration/` are authoritative.
+Do not edit a committed migration; add a reviewed versioned migration when a
+schema change is explicitly approved.
 
----
+## API documentation
 
-## Example API Routes
-| Route                    | Method | Description                     |
-|--------------------------|--------|---------------------------------|
-| `/api/auth/login`        | POST   | Issue JWT for authenticated use |
-| `/api/customers`         | GET    | List customers                  |
-| `/api/accounts`          | GET    | List accounts                   |
-| `/api/transactions`      | POST   | Create a transaction            |
-| `/api/loans`             | GET    | List or view loans              |
-| `/docs` or `/swagger-ui` | GET    | OpenAPI documentation           |
-
----
-
-## Why This Project?
-To provide a pragmatic, end-to-end banking foundation that’s easy to extend: secure core services, a fast modern web client, and a focused AI/KYC microservice for real-world verification flows.
-
----
-
-## Acknowledgments
-- Spring, React, and FastAPI communities
-- OpenAPI/Swagger tooling
+The backend exposes its configured OpenAPI/Swagger documentation while running.
+Additional API and database notes are under `docs/`.

@@ -1,3 +1,0 @@
-# Portable pip entry point for local development.
-# The previous file contained machine-specific conda build paths.
--r requirements-portable.txt

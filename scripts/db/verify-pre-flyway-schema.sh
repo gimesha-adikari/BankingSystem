@@ -16,7 +16,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-V1_PATH="$REPO_ROOT/backend/corebank/src/main/resources/db/migration/V1__baseline.sql"
+V1_PATH="$REPO_ROOT/src/main/resources/db/migration/V1__baseline.sql"
 
 DB_HOST="${DB_HOST:-127.0.0.1}"
 DB_PORT="${DB_PORT:-3307}"
