@@ -2,23 +2,30 @@
 -- V2__core_ledger.sql
 --
 -- Slice 4B-2: Core Banking Ledger Schema
+-- Corrected in Slice 4B-2.1: hardened currency validation + reversal constraint.
 --
 -- Introduces authoritative financial ledger structures:
--- 1. accounts.currency column (default 'LKR') with ISO-4217 validation.
+-- 1. accounts.currency column (default 'LKR') with case-sensitive ISO-4217 format validation.
 -- 2. ledger_accounts (supporting both customer liability and system asset/clearing accounts).
 -- 3. journal_entries (immutable double-entry event headers).
 -- 4. journal_postings (immutable debit/credit leg entries).
 -- 5. core_transaction_idempotency (structural idempotency store).
 --
 -- NOTE:
+-- - Currency CHECK constraints use REGEXP_LIKE(..., 'c') for case-sensitive matching.
+--   This validates FORMAT only (e.g., 'ZZZ' is structurally valid; 'lkr' is rejected).
+--   ISO-4217 membership validation is an application-layer responsibility.
 -- - Zero changes to transactions table in this slice (legacy projection integration is Slice 4B-4).
 -- - Zero changes to Account.java or Transaction.java.
+-- - Journal tables are designed for append-only use; no update timestamp or mutation
+--   workflow exists. Application-level immutability will be enforced in later ledger code,
+--   with reconciliation as defense in depth.
 -- ==============================================================================
 
 -- 1. Add currency to legacy accounts table
 ALTER TABLE `accounts`
   ADD COLUMN `currency` VARCHAR(3) NOT NULL DEFAULT 'LKR',
-  ADD CONSTRAINT `chk_accounts_currency` CHECK (`currency` REGEXP '^[A-Z]{3}$');
+  ADD CONSTRAINT `chk_accounts_currency` CHECK (REGEXP_LIKE(`currency`, '^[A-Z]{3}$', 'c'));
 
 -- 2. Create ledger_accounts table
 CREATE TABLE `ledger_accounts` (
@@ -39,7 +46,7 @@ CREATE TABLE `ledger_accounts` (
   ),
   CONSTRAINT `chk_ledger_accounts_class` CHECK (`account_class` IN ('ASSET', 'LIABILITY', 'EQUITY')),
   CONSTRAINT `chk_ledger_accounts_status` CHECK (`status` IN ('ACTIVE', 'FROZEN', 'CLOSED')),
-  CONSTRAINT `chk_ledger_accounts_currency` CHECK (`currency` REGEXP '^[A-Z]{3}$')
+  CONSTRAINT `chk_ledger_accounts_currency` CHECK (REGEXP_LIKE(`currency`, '^[A-Z]{3}$', 'c'))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- 3. Create journal_entries table
@@ -65,13 +72,18 @@ CREATE TABLE `journal_entries` (
   CONSTRAINT `chk_journal_entries_type` CHECK (`entry_type` IN ('DEPOSIT', 'WITHDRAWAL', 'TRANSFER', 'REVERSAL', 'OPENING_BALANCE')),
   CONSTRAINT `chk_journal_entries_status` CHECK (`status` = 'POSTED'),
   CONSTRAINT `chk_journal_entries_amount` CHECK (`total_amount` > 0),
-  CONSTRAINT `chk_journal_entries_currency` CHECK (`currency` REGEXP '^[A-Z]{3}$'),
+  CONSTRAINT `chk_journal_entries_currency` CHECK (REGEXP_LIKE(`currency`, '^[A-Z]{3}$', 'c')),
   CONSTRAINT `chk_journal_entries_actor_type` CHECK (`actor_type` IN ('USER', 'SYSTEM')),
   CONSTRAINT `chk_journal_entries_actor_integrity` CHECK (
+    (`actor_type` NOT IN ('USER', 'SYSTEM')) OR
     (`actor_type` = 'USER' AND `initiated_by_user_id` IS NOT NULL AND `system_actor_id` IS NULL) OR
     (`actor_type` = 'SYSTEM' AND `system_actor_id` IS NOT NULL AND `initiated_by_user_id` IS NULL)
   ),
-  CONSTRAINT `chk_journal_entries_channel` CHECK (`channel` IN ('WEB', 'MOBILE', 'TELLER', 'SYSTEM'))
+  CONSTRAINT `chk_journal_entries_channel` CHECK (`channel` IN ('WEB', 'MOBILE', 'TELLER', 'SYSTEM')),
+  CONSTRAINT `chk_journal_entries_reversal_integrity` CHECK (
+    (`entry_type` = 'REVERSAL' AND `reversal_of_entry_id` IS NOT NULL) OR
+    (`entry_type` <> 'REVERSAL' AND `reversal_of_entry_id` IS NULL)
+  )
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- 4. Create journal_postings table
@@ -91,7 +103,7 @@ CREATE TABLE `journal_postings` (
   CONSTRAINT `fk_journal_postings_account` FOREIGN KEY (`ledger_account_id`) REFERENCES `ledger_accounts` (`ledger_account_id`) ON DELETE RESTRICT ON UPDATE RESTRICT,
   CONSTRAINT `chk_journal_postings_direction` CHECK (`direction` IN ('DEBIT', 'CREDIT')),
   CONSTRAINT `chk_journal_postings_amount` CHECK (`amount` > 0),
-  CONSTRAINT `chk_journal_postings_currency` CHECK (`currency` REGEXP '^[A-Z]{3}$')
+  CONSTRAINT `chk_journal_postings_currency` CHECK (REGEXP_LIKE(`currency`, '^[A-Z]{3}$', 'c'))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- 5. Create core_transaction_idempotency table

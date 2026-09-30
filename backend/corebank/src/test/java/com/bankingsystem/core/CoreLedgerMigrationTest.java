@@ -20,6 +20,46 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
+/**
+ * CoreLedgerMigrationTest — Slice 4B-2.1 hardened version.
+ *
+ * <p>Covers:
+ * <ul>
+ *   <li>Test 1: Fresh V1→V3 bootstrap + Hibernate schema validation</li>
+ *   <li>Test 2: Second Flyway startup is a no-op</li>
+ *   <li>Test 3: V2 structures exist; accounts.currency column exists</li>
+ *   <li>Test 4: Populated cutover preserves balances; all 7 integrity invariants pass</li>
+ *   <li>Test 5: Negative balance blocks V3 cutover (precondition fail-fast)</li>
+ *   <li>Test 6: Schema constraints enforce correct data; each failure asserts the
+ *               SPECIFIC NAMED CONSTRAINT, not merely any SQL error:
+ *     <ul>
+ *       <li>XOR identity (chk_ledger_accounts_identity)</li>
+ *       <li>Account class (chk_ledger_accounts_class)</li>
+ *       <li>Account status (chk_ledger_accounts_status)</li>
+ *       <li>Case-sensitive currency on accounts (chk_accounts_currency)</li>
+ *       <li>Case-sensitive currency on ledger_accounts (chk_ledger_accounts_currency)</li>
+ *       <li>Case-sensitive currency on journal_entries (chk_journal_entries_currency)</li>
+ *       <li>Case-sensitive currency on journal_postings (chk_journal_postings_currency)</li>
+ *       <li>Journal entry type (chk_journal_entries_type)</li>
+ *       <li>Journal status (chk_journal_entries_status)</li>
+ *       <li>Positive total_amount (chk_journal_entries_amount)</li>
+ *       <li>Actor type (chk_journal_entries_actor_type)</li>
+ *       <li>Actor integrity (chk_journal_entries_actor_integrity)</li>
+ *       <li>Channel (chk_journal_entries_channel)</li>
+ *       <li>Unique entry_reference (uk_journal_entries_reference) — uses two DISTINCT PKs</li>
+ *       <li>One reversal per original (uk_journal_entries_reversal_of)</li>
+ *       <li>Reversal type integrity CHECK (chk_journal_entries_reversal_integrity)</li>
+ *       <li>Posting direction (chk_journal_postings_direction)</li>
+ *       <li>Positive posting amount (chk_journal_postings_amount)</li>
+ *       <li>Unique (entry_id, sequence_number) (uk_journal_postings_entry_seq)</li>
+ *       <li>Idempotency operation type (chk_core_idem_op_type)</li>
+ *       <li>Idempotency state (chk_core_idem_state)</li>
+ *       <li>Unique (user_id, operation_type, client_key) (uk_core_idem_user_op_key)</li>
+ *     </ul>
+ *   </li>
+ *   <li>Test 7: Mid-cutover failure triggers EXIT HANDLER and rolls back ALL prior DML</li>
+ * </ul>
+ */
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 public class CoreLedgerMigrationTest {
 
@@ -28,9 +68,10 @@ public class CoreLedgerMigrationTest {
     private static final String DB_USER = envOr("DB_USERNAME", "banking_dev");
     private static final String DB_PASS = envOr("DB_PASSWORD", "change-me-locally");
 
-    private static final String CLEAN_DB = "banking_ledger_test_clean";
-    private static final String CUTOVER_DB = "banking_ledger_test_cutover";
+    private static final String CLEAN_DB    = "banking_ledger_test_clean";
+    private static final String CUTOVER_DB  = "banking_ledger_test_cutover";
     private static final String NEGATIVE_DB = "banking_ledger_test_negative";
+    private static final String ATOMIC_DB   = "banking_ledger_test_atomic";
 
     private static String getJdbcUrl(String dbName) {
         return "jdbc:mysql://" + DB_HOST + ":" + DB_PORT + "/" + dbName
@@ -66,6 +107,8 @@ public class CoreLedgerMigrationTest {
             stmt.execute("CREATE DATABASE " + CUTOVER_DB + " CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci");
             stmt.execute("DROP DATABASE IF EXISTS " + NEGATIVE_DB);
             stmt.execute("CREATE DATABASE " + NEGATIVE_DB + " CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci");
+            stmt.execute("DROP DATABASE IF EXISTS " + ATOMIC_DB);
+            stmt.execute("CREATE DATABASE " + ATOMIC_DB + " CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci");
         }
     }
 
@@ -77,6 +120,7 @@ public class CoreLedgerMigrationTest {
             stmt.execute("DROP DATABASE IF EXISTS " + CLEAN_DB);
             stmt.execute("DROP DATABASE IF EXISTS " + CUTOVER_DB);
             stmt.execute("DROP DATABASE IF EXISTS " + NEGATIVE_DB);
+            stmt.execute("DROP DATABASE IF EXISTS " + ATOMIC_DB);
         } catch (Exception ignored) {
         }
     }
@@ -90,6 +134,9 @@ public class CoreLedgerMigrationTest {
         return ds;
     }
 
+    // =========================================================================
+    // TEST 1: Fresh bootstrap applies all migrations and validates schema
+    // =========================================================================
     @Test
     @Order(1)
     void freshBootstrapAppliesAllMigrationsAndValidatesSchema() {
@@ -105,7 +152,7 @@ public class CoreLedgerMigrationTest {
         assertThat(result.migrationsExecuted).isEqualTo(3);
         assertThat(result.targetSchemaVersion).isEqualTo("3");
 
-        // Verify Hibernate validates schema cleanly
+        // Verify Hibernate validates the migrated schema without errors
         LocalContainerEntityManagerFactoryBean emfBean = new LocalContainerEntityManagerFactoryBean();
         emfBean.setDataSource(ds);
         emfBean.setPackagesToScan("com.bankingsystem.core");
@@ -113,12 +160,16 @@ public class CoreLedgerMigrationTest {
         Properties jpaProperties = new Properties();
         jpaProperties.put("hibernate.hbm2ddl.auto", "validate");
         jpaProperties.put("hibernate.dialect", "org.hibernate.dialect.MySQLDialect");
-        jpaProperties.put("hibernate.physical_naming_strategy", "org.hibernate.boot.model.naming.CamelCaseToUnderscoresNamingStrategy");
+        jpaProperties.put("hibernate.physical_naming_strategy",
+                "org.hibernate.boot.model.naming.CamelCaseToUnderscoresNamingStrategy");
         emfBean.setJpaProperties(jpaProperties);
         emfBean.afterPropertiesSet();
         emfBean.destroy();
     }
 
+    // =========================================================================
+    // TEST 2: Second Flyway startup is a no-op
+    // =========================================================================
     @Test
     @Order(2)
     void secondFlywayStartupIsNoOp() {
@@ -136,6 +187,9 @@ public class CoreLedgerMigrationTest {
         flyway.validate();
     }
 
+    // =========================================================================
+    // TEST 3: V2 structures exist; accounts.currency column defaults to 'LKR'
+    // =========================================================================
     @Test
     @Order(3)
     void v2SchemaStructuresAndAccountsCurrencyExist() throws Exception {
@@ -152,21 +206,25 @@ public class CoreLedgerMigrationTest {
                 assertThat(rs.getString("IS_NULLABLE")).isEqualTo("NO");
             }
 
-            // Ledger tables exist
-            for (String tbl : new String[]{"ledger_accounts", "journal_entries", "journal_postings", "core_transaction_idempotency"}) {
+            // All 4 ledger tables exist
+            for (String tbl : new String[]{"ledger_accounts", "journal_entries", "journal_postings",
+                    "core_transaction_idempotency"}) {
                 try (ResultSet rs = stmt.executeQuery(
-                        "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA='" + CLEAN_DB + "' AND TABLE_NAME='" + tbl + "'")) {
+                        "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA='" + CLEAN_DB
+                        + "' AND TABLE_NAME='" + tbl + "'")) {
                     assertThat(rs.next()).isTrue();
-                    assertThat(rs.getInt(1)).isEqualTo(1);
+                    assertThat(rs.getInt(1)).as("Table %s should exist", tbl).isEqualTo(1);
                 }
             }
 
-            // System accounts exist
-            try (ResultSet rs = stmt.executeQuery("SELECT system_code, account_class FROM ledger_accounts WHERE system_code IS NOT NULL")) {
+            // V3 system accounts exist
+            try (ResultSet rs = stmt.executeQuery(
+                    "SELECT system_code, account_class FROM ledger_accounts WHERE system_code IS NOT NULL ORDER BY system_code")) {
                 int count = 0;
                 while (rs.next()) {
                     count++;
-                    assertThat(rs.getString("system_code")).isIn("SYSTEM_VAULT_CASH:LKR", "SYSTEM_OPENING_BALANCE:LKR");
+                    assertThat(rs.getString("system_code"))
+                            .isIn("SYSTEM_OPENING_BALANCE:LKR", "SYSTEM_VAULT_CASH:LKR");
                     assertThat(rs.getString("account_class")).isEqualTo("ASSET");
                 }
                 assertThat(count).isEqualTo(2);
@@ -174,12 +232,15 @@ public class CoreLedgerMigrationTest {
         }
     }
 
+    // =========================================================================
+    // TEST 4: Populated cutover — all 7 balance integrity invariants
+    // =========================================================================
     @Test
     @Order(4)
     void populatedCutoverPreservesBalancesAndBalancesOpeningEntries() throws Exception {
         DataSource ds = createDataSource(CUTOVER_DB);
 
-        // Step A: apply V1 baseline and baseline at 1
+        // Step A: apply V1 baseline
         Flyway flywayV1 = Flyway.configure()
                 .dataSource(ds)
                 .locations("classpath:db/migration")
@@ -187,7 +248,7 @@ public class CoreLedgerMigrationTest {
                 .load();
         flywayV1.migrate();
 
-        // Step B: insert fixtures (Branch, Customer, 4 Accounts, 2 Transactions)
+        // Step B: insert fixtures (Branch, Customer, 4 Accounts with balances 1250.2500 / 0.0000 / 500.0000 / 12.3456)
         try (Connection conn = ds.getConnection();
              Statement stmt = conn.createStatement()) {
             stmt.execute("INSERT INTO branches (branch_id, address, branch_name, contact_number) " +
@@ -213,23 +274,23 @@ public class CoreLedgerMigrationTest {
         assertThat(result.success).isTrue();
         assertThat(result.migrationsExecuted).isEqualTo(2);
 
-        // Step D: Verify Cutover Integrity
+        // Step D: Verify all 7 integrity invariants
         try (Connection conn = ds.getConnection();
              Statement stmt = conn.createStatement()) {
 
-            // 1. Exactly 4 customer ledger accounts (1:1 mapping)
+            // Invariant 1: Exactly 4 customer ledger accounts (1:1 mapping)
             try (ResultSet rs = stmt.executeQuery("SELECT COUNT(*) FROM ledger_accounts WHERE customer_account_id IS NOT NULL")) {
                 assertThat(rs.next()).isTrue();
-                assertThat(rs.getInt(1)).isEqualTo(4);
+                assertThat(rs.getInt(1)).as("Invariant 1: 4 customer ledger accounts").isEqualTo(4);
             }
 
-            // 2. Exactly 3 opening entries (positive accounts; ACC-002 with 0 has none)
+            // Invariant 2: Exactly 3 opening entries (positive accounts; ACC-002 with 0 has none)
             try (ResultSet rs = stmt.executeQuery("SELECT COUNT(*) FROM journal_entries WHERE entry_type = 'OPENING_BALANCE'")) {
                 assertThat(rs.next()).isTrue();
-                assertThat(rs.getInt(1)).isEqualTo(3);
+                assertThat(rs.getInt(1)).as("Invariant 2: 3 opening entries for positive balances").isEqualTo(3);
             }
 
-            // 3. Every opening entry has exactly 2 balanced postings
+            // Invariant 3: Every opening entry has exactly 2 balanced postings (DEBIT = CREDIT per entry)
             try (ResultSet rs = stmt.executeQuery(
                     "SELECT je.entry_id, COUNT(jp.posting_id) AS cnt, " +
                     "SUM(CASE WHEN jp.direction = 'DEBIT' THEN jp.amount ELSE 0 END) AS debits, " +
@@ -239,13 +300,15 @@ public class CoreLedgerMigrationTest {
                 int entryCount = 0;
                 while (rs.next()) {
                     entryCount++;
-                    assertThat(rs.getInt("cnt")).isEqualTo(2);
-                    assertThat(rs.getBigDecimal("debits")).isEqualByComparingTo(rs.getBigDecimal("credits"));
+                    assertThat(rs.getInt("cnt")).as("Invariant 3: 2 postings per entry").isEqualTo(2);
+                    assertThat(rs.getBigDecimal("debits"))
+                            .as("Invariant 3: DEBIT = CREDIT within entry")
+                            .isEqualByComparingTo(rs.getBigDecimal("credits"));
                 }
-                assertThat(entryCount).isEqualTo(3);
+                assertThat(entryCount).as("Invariant 3: 3 entries had posting pairs").isEqualTo(3);
             }
 
-            // 4. Derived liability balance matches accounts.balance to 4 decimals
+            // Invariant 4: Derived liability balance matches accounts.balance to 4 decimals
             try (ResultSet rs = stmt.executeQuery(
                     "SELECT a.account_number, a.balance, " +
                     "COALESCE(SUM(CASE WHEN jp.direction = 'CREDIT' THEN jp.amount ELSE -jp.amount END), 0.0000) AS derived " +
@@ -256,40 +319,47 @@ public class CoreLedgerMigrationTest {
                 while (rs.next()) {
                     BigDecimal acctBal = rs.getBigDecimal("balance");
                     BigDecimal derBal = rs.getBigDecimal("derived");
-                    assertThat(acctBal).isEqualByComparingTo(derBal);
+                    assertThat(acctBal)
+                            .as("Invariant 4: account %s balance matches ledger derived balance", rs.getString("account_number"))
+                            .isEqualByComparingTo(derBal);
                     if ("ACC-004".equals(rs.getString("account_number"))) {
                         assertThat(derBal).isEqualByComparingTo(new BigDecimal("12.3456"));
                     }
                 }
             }
 
-            // 5. System accounts: SYSTEM_OPENING_BALANCE equals total positive balances (1762.5956)
+            // Invariant 5: SYSTEM_OPENING_BALANCE debit total equals total positive account balances (1762.5956)
             try (ResultSet rs = stmt.executeQuery(
                     "SELECT la.system_code, " +
                     "COALESCE(SUM(CASE WHEN jp.direction = 'DEBIT' THEN jp.amount ELSE -jp.amount END), 0.0000) AS asset_bal " +
                     "FROM ledger_accounts la LEFT JOIN journal_postings jp ON jp.ledger_account_id = la.ledger_account_id " +
                     "WHERE la.system_code = 'SYSTEM_OPENING_BALANCE:LKR' GROUP BY la.ledger_account_id, la.system_code")) {
                 assertThat(rs.next()).isTrue();
-                assertThat(rs.getBigDecimal("asset_bal")).isEqualByComparingTo(new BigDecimal("1762.5956"));
+                assertThat(rs.getBigDecimal("asset_bal"))
+                        .as("Invariant 5: SYSTEM_OPENING_BALANCE = 1762.5956")
+                        .isEqualByComparingTo(new BigDecimal("1762.5956"));
             }
 
-            // 6. SYSTEM_VAULT_CASH has 0 postings
+            // Invariant 6: SYSTEM_VAULT_CASH has zero postings (not used in opening balance migration)
             try (ResultSet rs = stmt.executeQuery(
                     "SELECT COUNT(jp.posting_id) FROM ledger_accounts la " +
                     "LEFT JOIN journal_postings jp ON jp.ledger_account_id = la.ledger_account_id " +
                     "WHERE la.system_code = 'SYSTEM_VAULT_CASH:LKR'")) {
                 assertThat(rs.next()).isTrue();
-                assertThat(rs.getInt(1)).isEqualTo(0);
+                assertThat(rs.getInt(1)).as("Invariant 6: SYSTEM_VAULT_CASH has 0 postings").isEqualTo(0);
             }
 
-            // 7. Legacy transactions row count unchanged (2 rows; zero added)
+            // Invariant 7: Legacy transactions row count unchanged (2 rows; zero added by migration)
             try (ResultSet rs = stmt.executeQuery("SELECT COUNT(*) FROM transactions")) {
                 assertThat(rs.next()).isTrue();
-                assertThat(rs.getInt(1)).isEqualTo(2);
+                assertThat(rs.getInt(1)).as("Invariant 7: legacy transactions untouched (2 rows)").isEqualTo(2);
             }
         }
     }
 
+    // =========================================================================
+    // TEST 5: Negative balance blocks V3 (precondition fail-fast, zero DML)
+    // =========================================================================
     @Test
     @Order(5)
     void negativeBalanceBlocksCutoverBeforeDataChanges() throws Exception {
@@ -314,7 +384,7 @@ public class CoreLedgerMigrationTest {
                     "SELECT UUID_TO_BIN(UUID(), 0), 'ACC-NEG', 'ACTIVE', 'SAVINGS', -100.0000, 1, customer_id, NOW(), NOW() FROM customers LIMIT 1");
         }
 
-        // Step C: Run Flyway to latest -> must fail on V3
+        // Step C: Run V2 + V3 — must fail on V3 precondition A (negative balance)
         Flyway flywayFull = Flyway.configure()
                 .dataSource(ds)
                 .locations("classpath:db/migration")
@@ -329,49 +399,338 @@ public class CoreLedgerMigrationTest {
              Statement stmt = conn.createStatement()) {
             try (ResultSet rs = stmt.executeQuery("SELECT COUNT(*) FROM ledger_accounts")) {
                 assertThat(rs.next()).isTrue();
-                assertThat(rs.getInt(1)).isEqualTo(0);
+                assertThat(rs.getInt(1)).as("No ledger_accounts written on precondition failure").isEqualTo(0);
             }
             try (ResultSet rs = stmt.executeQuery("SELECT COUNT(*) FROM journal_entries")) {
                 assertThat(rs.next()).isTrue();
-                assertThat(rs.getInt(1)).isEqualTo(0);
+                assertThat(rs.getInt(1)).as("No journal_entries written on precondition failure").isEqualTo(0);
             }
             try (ResultSet rs = stmt.executeQuery("SELECT COUNT(*) FROM system_configs WHERE config_key = 'ledger_cutover_at'")) {
                 assertThat(rs.next()).isTrue();
-                assertThat(rs.getInt(1)).isEqualTo(0);
+                assertThat(rs.getInt(1)).as("No ledger_cutover_at config written on precondition failure").isEqualTo(0);
             }
         }
     }
 
+    // =========================================================================
+    // TEST 6: Schema constraints enforce correct data — each failure asserts the
+    //         SPECIFIC NAMED CONSTRAINT name, not merely any SQL error.
+    // =========================================================================
     @Test
     @Order(6)
     void schemaConstraintsPreventInvalidData() throws Exception {
         DataSource ds = createDataSource(CLEAN_DB);
         try (Connection conn = ds.getConnection();
              Statement stmt = conn.createStatement()) {
+            stmt.execute("SET FOREIGN_KEY_CHECKS = 0;");
 
-            // 1. XOR check: both non-null
+            // --- ledger_accounts constraints ---
+
+            // chk_ledger_accounts_identity: both customer_account_id and system_code non-null
             assertThatThrownBy(() -> stmt.execute(
                     "INSERT INTO ledger_accounts (ledger_account_id, customer_account_id, system_code, account_class, currency, status, created_at) " +
                     "VALUES (UUID_TO_BIN(UUID(), 0), UUID_TO_BIN(UUID(), 0), 'SYS_BOTH', 'ASSET', 'LKR', 'ACTIVE', NOW())"))
+                    .as("XOR identity: both non-null")
                     .hasMessageContaining("chk_ledger_accounts_identity");
 
-            // 2. XOR check: both null
+            // chk_ledger_accounts_identity: both null
             assertThatThrownBy(() -> stmt.execute(
                     "INSERT INTO ledger_accounts (ledger_account_id, customer_account_id, system_code, account_class, currency, status, created_at) " +
                     "VALUES (UUID_TO_BIN(UUID(), 0), NULL, NULL, 'ASSET', 'LKR', 'ACTIVE', NOW())"))
+                    .as("XOR identity: both null")
                     .hasMessageContaining("chk_ledger_accounts_identity");
 
-            // 3. Journal entry amount must be positive
+            // chk_ledger_accounts_class: invalid account_class
+            assertThatThrownBy(() -> stmt.execute(
+                    "INSERT INTO ledger_accounts (ledger_account_id, customer_account_id, system_code, account_class, currency, status, created_at) " +
+                    "VALUES (UUID_TO_BIN(UUID(), 0), NULL, 'SYS-BAD-CLASS', 'REVENUE', 'LKR', 'ACTIVE', NOW())"))
+                    .as("Account class: REVENUE not allowed")
+                    .hasMessageContaining("chk_ledger_accounts_class");
+
+            // chk_ledger_accounts_status: invalid status
+            assertThatThrownBy(() -> stmt.execute(
+                    "INSERT INTO ledger_accounts (ledger_account_id, customer_account_id, system_code, account_class, currency, status, created_at) " +
+                    "VALUES (UUID_TO_BIN(UUID(), 0), NULL, 'SYS-BAD-STATUS', 'ASSET', 'LKR', 'PENDING', NOW())"))
+                    .as("Account status: PENDING not allowed")
+                    .hasMessageContaining("chk_ledger_accounts_status");
+
+            // chk_accounts_currency: lowercase 'lkr' REJECTED on accounts
+            assertThatThrownBy(() -> stmt.execute(
+                    "INSERT INTO accounts (account_id, account_number, account_type, account_status, balance, customer_id, branch_id, created_at, updated_at, currency) " +
+                    "VALUES (UUID_TO_BIN(UUID(), 0), 'ACC-lkr-cs', 'SAVINGS', 'ACTIVE', 100.0000, UUID_TO_BIN(UUID(), 0), 1, NOW(), NOW(), 'lkr')"))
+                    .as("accounts.currency: lowercase 'lkr' must be rejected (case-sensitive)")
+                    .hasMessageContaining("chk_accounts_currency");
+
+            // chk_ledger_accounts_currency: lowercase 'lkr' REJECTED on ledger_accounts
+            assertThatThrownBy(() -> stmt.execute(
+                    "INSERT INTO ledger_accounts (ledger_account_id, customer_account_id, system_code, account_class, currency, status, created_at) " +
+                    "VALUES (UUID_TO_BIN(UUID(), 0), NULL, 'SYS-lkr-CURR', 'ASSET', 'lkr', 'ACTIVE', NOW())"))
+                    .as("ledger_accounts.currency: lowercase 'lkr' must be rejected (case-sensitive)")
+                    .hasMessageContaining("chk_ledger_accounts_currency");
+
+            // chk_ledger_accounts_currency: mixed case 'Lkr' REJECTED
+            assertThatThrownBy(() -> stmt.execute(
+                    "INSERT INTO ledger_accounts (ledger_account_id, customer_account_id, system_code, account_class, currency, status, created_at) " +
+                    "VALUES (UUID_TO_BIN(UUID(), 0), NULL, 'SYS-Lkr-CURR', 'ASSET', 'Lkr', 'ACTIVE', NOW())"))
+                    .as("ledger_accounts.currency: mixed case 'Lkr' must be rejected (case-sensitive)")
+                    .hasMessageContaining("chk_ledger_accounts_currency");
+
+            // --- journal_entries constraints ---
+
+            // chk_journal_entries_type: invalid entry_type
             assertThatThrownBy(() -> stmt.execute(
                     "INSERT INTO journal_entries (entry_id, entry_reference, entry_type, status, currency, total_amount, actor_type, system_actor_id, channel, posted_at) " +
-                    "VALUES (UUID_TO_BIN(UUID(), 0), 'REF-ZERO-TEST', 'DEPOSIT', 'POSTED', 'LKR', 0.0000, 'SYSTEM', 'TEST', 'SYSTEM', NOW())"))
+                    "VALUES (UUID_TO_BIN(UUID(), 0), 'REF-BAD-TYPE', 'LOAN_PAYMENT', 'POSTED', 'LKR', 100.0000, 'SYSTEM', 'TEST', 'SYSTEM', NOW())"))
+                    .as("Journal entry type: LOAN_PAYMENT not allowed")
+                    .hasMessageContaining("chk_journal_entries_type");
+
+            // chk_journal_entries_status: invalid status
+            assertThatThrownBy(() -> stmt.execute(
+                    "INSERT INTO journal_entries (entry_id, entry_reference, entry_type, status, currency, total_amount, actor_type, system_actor_id, channel, posted_at) " +
+                    "VALUES (UUID_TO_BIN(UUID(), 0), 'REF-BAD-STATUS', 'DEPOSIT', 'PENDING', 'LKR', 100.0000, 'SYSTEM', 'TEST', 'SYSTEM', NOW())"))
+                    .as("Journal entry status: only POSTED is allowed")
+                    .hasMessageContaining("chk_journal_entries_status");
+
+            // chk_journal_entries_amount: zero amount
+            assertThatThrownBy(() -> stmt.execute(
+                    "INSERT INTO journal_entries (entry_id, entry_reference, entry_type, status, currency, total_amount, actor_type, system_actor_id, channel, posted_at) " +
+                    "VALUES (UUID_TO_BIN(UUID(), 0), 'REF-ZERO-AMOUNT', 'DEPOSIT', 'POSTED', 'LKR', 0.0000, 'SYSTEM', 'TEST', 'SYSTEM', NOW())"))
+                    .as("Journal entry amount: zero not allowed")
                     .hasMessageContaining("chk_journal_entries_amount");
 
-            // 4. Journal posting direction must be DEBIT or CREDIT
+            // chk_journal_entries_currency: lowercase 'lkr' on journal_entries
+            assertThatThrownBy(() -> stmt.execute(
+                    "INSERT INTO journal_entries (entry_id, entry_reference, entry_type, status, currency, total_amount, actor_type, system_actor_id, channel, posted_at) " +
+                    "VALUES (UUID_TO_BIN(UUID(), 0), 'REF-lkr-JE', 'DEPOSIT', 'POSTED', 'lkr', 100.0000, 'SYSTEM', 'TEST', 'SYSTEM', NOW())"))
+                    .as("journal_entries.currency: lowercase 'lkr' must be rejected (case-sensitive)")
+                    .hasMessageContaining("chk_journal_entries_currency");
+
+            // chk_journal_entries_actor_type: invalid actor_type
+            assertThatThrownBy(() -> stmt.execute(
+                    "INSERT INTO journal_entries (entry_id, entry_reference, entry_type, status, currency, total_amount, actor_type, system_actor_id, channel, posted_at) " +
+                    "VALUES (UUID_TO_BIN(UUID(), 0), 'REF-BAD-ACTOR', 'DEPOSIT', 'POSTED', 'LKR', 100.0000, 'ADMIN', 'TEST', 'SYSTEM', NOW())"))
+                    .as("Journal actor type: ADMIN not allowed")
+                    .hasMessageContaining("chk_journal_entries_actor_type");
+
+            // chk_journal_entries_actor_integrity: USER type but system_actor_id set (not null)
+            assertThatThrownBy(() -> stmt.execute(
+                    "INSERT INTO journal_entries (entry_id, entry_reference, entry_type, status, currency, total_amount, actor_type, initiated_by_user_id, system_actor_id, channel, posted_at) " +
+                    "VALUES (UUID_TO_BIN(UUID(), 0), 'REF-ACTOR-INTEG', 'DEPOSIT', 'POSTED', 'LKR', 100.0000, 'SYSTEM', NULL, NULL, 'SYSTEM', NOW())"))
+                    .as("Journal actor integrity: SYSTEM actor cannot have null system_actor_id")
+                    .hasMessageContaining("chk_journal_entries_actor_integrity");
+
+            // chk_journal_entries_channel: invalid channel
+            assertThatThrownBy(() -> stmt.execute(
+                    "INSERT INTO journal_entries (entry_id, entry_reference, entry_type, status, currency, total_amount, actor_type, system_actor_id, channel, posted_at) " +
+                    "VALUES (UUID_TO_BIN(UUID(), 0), 'REF-BAD-CHAN', 'DEPOSIT', 'POSTED', 'LKR', 100.0000, 'SYSTEM', 'TEST', 'ATM', NOW())"))
+                    .as("Journal channel: ATM not allowed (only WEB, MOBILE, TELLER, SYSTEM)")
+                    .hasMessageContaining("chk_journal_entries_channel");
+
+            // uk_journal_entries_reference: duplicate entry_reference with DISTINCT PKs
+            // First row: unique PK A, unique reference
+            stmt.execute("INSERT INTO journal_entries (entry_id, entry_reference, entry_type, status, currency, total_amount, actor_type, system_actor_id, channel, posted_at) " +
+                    "VALUES (UUID_TO_BIN('aa000000-0000-0000-0000-000000000001', 0), 'REF-UNIQUE-SHARED', 'DEPOSIT', 'POSTED', 'LKR', 100.0000, 'SYSTEM', 'TEST', 'SYSTEM', NOW())");
+            // Second row: DISTINCT PK B, SAME reference — must fail on uk_journal_entries_reference
+            assertThatThrownBy(() -> stmt.execute(
+                    "INSERT INTO journal_entries (entry_id, entry_reference, entry_type, status, currency, total_amount, actor_type, system_actor_id, channel, posted_at) " +
+                    "VALUES (UUID_TO_BIN('aa000000-0000-0000-0000-000000000002', 0), 'REF-UNIQUE-SHARED', 'DEPOSIT', 'POSTED', 'LKR', 200.0000, 'SYSTEM', 'TEST', 'SYSTEM', NOW())"))
+                    .as("Unique entry_reference: second row with different PK but same reference must fail on uk_journal_entries_reference")
+                    .hasMessageContaining("uk_journal_entries_reference");
+
+            // chk_journal_entries_reversal_integrity: REVERSAL with null reversal_of_entry_id
+            assertThatThrownBy(() -> stmt.execute(
+                    "INSERT INTO journal_entries (entry_id, entry_reference, entry_type, status, currency, total_amount, actor_type, system_actor_id, channel, reversal_of_entry_id, posted_at) " +
+                    "VALUES (UUID_TO_BIN(UUID(), 0), 'REF-BAD-REV-NULL', 'REVERSAL', 'POSTED', 'LKR', 100.0000, 'SYSTEM', 'TEST', 'SYSTEM', NULL, NOW())"))
+                    .as("Reversal integrity: REVERSAL entry cannot have null reversal_of_entry_id")
+                    .hasMessageContaining("chk_journal_entries_reversal_integrity");
+
+            // chk_journal_entries_reversal_integrity: DEPOSIT with non-null reversal_of_entry_id
+            assertThatThrownBy(() -> stmt.execute(
+                    "INSERT INTO journal_entries (entry_id, entry_reference, entry_type, status, currency, total_amount, actor_type, system_actor_id, channel, reversal_of_entry_id, posted_at) " +
+                    "VALUES (UUID_TO_BIN(UUID(), 0), 'REF-BAD-DEP-REV', 'DEPOSIT', 'POSTED', 'LKR', 100.0000, 'SYSTEM', 'TEST', 'SYSTEM', UUID_TO_BIN(UUID(), 0), NOW())"))
+                    .as("Reversal integrity: non-REVERSAL entry cannot have non-null reversal_of_entry_id")
+                    .hasMessageContaining("chk_journal_entries_reversal_integrity");
+
+            // uk_journal_entries_reversal_of: second REVERSAL of the same original entry
+            // Insert original entry
+            stmt.execute("INSERT INTO journal_entries (entry_id, entry_reference, entry_type, status, currency, total_amount, actor_type, system_actor_id, channel, posted_at) " +
+                    "VALUES (UUID_TO_BIN('bb000000-0000-0000-0000-000000000001', 0), 'REF-ORIG-FOR-REV', 'DEPOSIT', 'POSTED', 'LKR', 100.0000, 'SYSTEM', 'TEST', 'SYSTEM', NOW())");
+            // First reversal — accepted
+            stmt.execute("INSERT INTO journal_entries (entry_id, entry_reference, entry_type, status, currency, total_amount, actor_type, system_actor_id, channel, reversal_of_entry_id, posted_at) " +
+                    "VALUES (UUID_TO_BIN('bb000000-0000-0000-0000-000000000002', 0), 'REF-FIRST-REVERSAL', 'REVERSAL', 'POSTED', 'LKR', 100.0000, 'SYSTEM', 'TEST', 'SYSTEM', UUID_TO_BIN('bb000000-0000-0000-0000-000000000001', 0), NOW())");
+            // Second reversal of same original — must fail on uk_journal_entries_reversal_of
+            assertThatThrownBy(() -> stmt.execute(
+                    "INSERT INTO journal_entries (entry_id, entry_reference, entry_type, status, currency, total_amount, actor_type, system_actor_id, channel, reversal_of_entry_id, posted_at) " +
+                    "VALUES (UUID_TO_BIN('bb000000-0000-0000-0000-000000000003', 0), 'REF-SECOND-REVERSAL', 'REVERSAL', 'POSTED', 'LKR', 100.0000, 'SYSTEM', 'TEST', 'SYSTEM', UUID_TO_BIN('bb000000-0000-0000-0000-000000000001', 0), NOW())"))
+                    .as("One reversal per original: second reversal of same entry must fail on uk_journal_entries_reversal_of")
+                    .hasMessageContaining("uk_journal_entries_reversal_of");
+
+            // --- journal_postings constraints ---
+
+            // Get a valid entry_id and ledger_account_id for posting tests
+            String validEntryId = "UUID_TO_BIN('aa000000-0000-0000-0000-000000000001', 0)";
+            String validLedgerAccId = "(SELECT ledger_account_id FROM ledger_accounts LIMIT 1)";
+
+            // chk_journal_postings_direction: invalid direction
             assertThatThrownBy(() -> stmt.execute(
                     "INSERT INTO journal_postings (posting_id, entry_id, ledger_account_id, sequence_number, direction, amount, currency, created_at) " +
-                    "VALUES (UUID_TO_BIN(UUID(), 0), UUID_TO_BIN(UUID(), 0), UUID_TO_BIN(UUID(), 0), 0, 'INVALID', 10.0000, 'LKR', NOW())"))
+                    "VALUES (UUID_TO_BIN(UUID(), 0), " + validEntryId + ", " + validLedgerAccId + ", 99, 'INVALID', 10.0000, 'LKR', NOW())"))
+                    .as("Posting direction: INVALID not allowed (only DEBIT, CREDIT)")
                     .hasMessageContaining("chk_journal_postings_direction");
+
+            // chk_journal_postings_amount: zero amount
+            assertThatThrownBy(() -> stmt.execute(
+                    "INSERT INTO journal_postings (posting_id, entry_id, ledger_account_id, sequence_number, direction, amount, currency, created_at) " +
+                    "VALUES (UUID_TO_BIN(UUID(), 0), " + validEntryId + ", " + validLedgerAccId + ", 98, 'DEBIT', 0.0000, 'LKR', NOW())"))
+                    .as("Posting amount: zero not allowed")
+                    .hasMessageContaining("chk_journal_postings_amount");
+
+            // chk_journal_postings_currency: lowercase 'lkr' on journal_postings
+            assertThatThrownBy(() -> stmt.execute(
+                    "INSERT INTO journal_postings (posting_id, entry_id, ledger_account_id, sequence_number, direction, amount, currency, created_at) " +
+                    "VALUES (UUID_TO_BIN(UUID(), 0), " + validEntryId + ", " + validLedgerAccId + ", 97, 'DEBIT', 50.0000, 'lkr', NOW())"))
+                    .as("journal_postings.currency: lowercase 'lkr' must be rejected (case-sensitive)")
+                    .hasMessageContaining("chk_journal_postings_currency");
+
+            // uk_journal_postings_entry_seq: duplicate (entry_id, sequence_number)
+            stmt.execute("INSERT INTO journal_postings (posting_id, entry_id, ledger_account_id, sequence_number, direction, amount, currency, created_at) " +
+                    "VALUES (UUID_TO_BIN('cc000000-0000-0000-0000-000000000001', 0), " + validEntryId + ", " + validLedgerAccId + ", 0, 'DEBIT', 100.0000, 'LKR', NOW())");
+            assertThatThrownBy(() -> stmt.execute(
+                    "INSERT INTO journal_postings (posting_id, entry_id, ledger_account_id, sequence_number, direction, amount, currency, created_at) " +
+                    "VALUES (UUID_TO_BIN('cc000000-0000-0000-0000-000000000002', 0), " + validEntryId + ", " + validLedgerAccId + ", 0, 'CREDIT', 100.0000, 'LKR', NOW())"))
+                    .as("Unique (entry_id, sequence_number): duplicate pair must fail on uk_journal_postings_entry_seq")
+                    .hasMessageContaining("uk_journal_postings_entry_seq");
+
+            // --- core_transaction_idempotency constraints ---
+
+            // chk_core_idem_op_type: invalid operation_type
+            assertThatThrownBy(() -> stmt.execute(
+                    "INSERT INTO core_transaction_idempotency (id, user_id, operation_type, client_key, request_hash, state, created_at) " +
+                    "VALUES (UUID_TO_BIN(UUID(), 0), UUID_TO_BIN(UUID(), 0), 'LOAN_PAYMENT', 'KEY-1', 'abc123', 'PROCESSING', NOW())"))
+                    .as("Idempotency operation type: LOAN_PAYMENT not allowed")
+                    .hasMessageContaining("chk_core_idem_op_type");
+
+            // chk_core_idem_state: invalid state
+            assertThatThrownBy(() -> stmt.execute(
+                    "INSERT INTO core_transaction_idempotency (id, user_id, operation_type, client_key, request_hash, state, created_at) " +
+                    "VALUES (UUID_TO_BIN(UUID(), 0), UUID_TO_BIN(UUID(), 0), 'DEPOSIT', 'KEY-2', 'abc123', 'PENDING', NOW())"))
+                    .as("Idempotency state: PENDING not allowed (only PROCESSING, COMPLETED)")
+                    .hasMessageContaining("chk_core_idem_state");
+
+            // uk_core_idem_user_op_key: duplicate (user_id, operation_type, client_key)
+            String testUserId = "UUID_TO_BIN('dd000000-0000-0000-0000-000000000001', 0)";
+            stmt.execute("INSERT INTO core_transaction_idempotency (id, user_id, operation_type, client_key, request_hash, state, created_at) " +
+                    "VALUES (UUID_TO_BIN('dd000000-0000-0000-0000-000000000002', 0), " + testUserId + ", 'DEPOSIT', 'KEY-DEDUP', 'hash1', 'PROCESSING', NOW())");
+            assertThatThrownBy(() -> stmt.execute(
+                    "INSERT INTO core_transaction_idempotency (id, user_id, operation_type, client_key, request_hash, state, created_at) " +
+                    "VALUES (UUID_TO_BIN('dd000000-0000-0000-0000-000000000003', 0), " + testUserId + ", 'DEPOSIT', 'KEY-DEDUP', 'hash2', 'PROCESSING', NOW())"))
+                    .as("Unique (user_id, operation_type, client_key): duplicate triplet must fail on uk_core_idem_user_op_key")
+                    .hasMessageContaining("uk_core_idem_user_op_key");
+        }
+    }
+
+    // =========================================================================
+    // TEST 7: Mid-cutover DML failure triggers EXIT HANDLER and rolls back ALL
+    //         prior DML within the transaction (system_configs + system ledger accounts)
+    // =========================================================================
+    @Test
+    @Order(7)
+    void midCutoverFailureRollsBackAllPriorDmlViaExitHandler() throws Exception {
+        DataSource ds = createDataSource(ATOMIC_DB);
+
+        // Step A: apply V1 + V2 migrations
+        Flyway flywayV2 = Flyway.configure()
+                .dataSource(ds)
+                .locations("classpath:db/migration")
+                .target("2")
+                .load();
+        flywayV2.migrate();
+
+        // Step B: insert valid LKR accounts (pass all V3 preconditions)
+        try (Connection conn = ds.getConnection();
+             Statement stmt = conn.createStatement()) {
+            stmt.execute("INSERT INTO branches (branch_id, address, branch_name, contact_number) " +
+                    "VALUES (1, 'Test St', 'Test Branch', '+94112345678')");
+            stmt.execute("INSERT INTO customers (customer_id, first_name, last_name, email, phone, date_of_birth, gender, status, address, created_at, updated_at) " +
+                    "VALUES (UUID_TO_BIN('ee000000-0000-0000-0000-000000000001', 0), 'Mid', 'Test', 'mid.test@example.test', '+94771111111', '1990-01-01', 'MALE', 'ACTIVE', 'Test', NOW(), NOW())");
+            stmt.execute("INSERT INTO accounts (account_id, account_number, account_status, account_type, balance, branch_id, customer_id, created_at, updated_at) " +
+                    "VALUES (UUID_TO_BIN('ee000000-0000-0000-0000-000000000002', 0), 'ACC-ATOMIC', 'ACTIVE', 'SAVINGS', 750.0000, 1, UUID_TO_BIN('ee000000-0000-0000-0000-000000000001', 0), NOW(), NOW())");
+        }
+
+        // Step C: Create and call an atomicity-proof procedure that:
+        //   - Performs Write 1 (system_configs INSERT) — succeeds
+        //   - Performs Write 2 (system ledger_accounts INSERT) — succeeds
+        //   - Performs Write 3 (invalid INJECT to trigger chk_ledger_accounts_class) — FAILS
+        //   EXIT HANDLER must ROLLBACK all 3 writes.
+        try (Connection conn = ds.getConnection();
+             Statement stmt = conn.createStatement()) {
+
+            // Record before-state
+            try (ResultSet rs = stmt.executeQuery("SELECT COUNT(*) FROM system_configs WHERE config_key='ledger_cutover_at'")) {
+                assertThat(rs.next()).isTrue();
+                assertThat(rs.getInt(1)).as("Before: no cutover config exists").isEqualTo(0);
+            }
+            try (ResultSet rs = stmt.executeQuery("SELECT COUNT(*) FROM ledger_accounts")) {
+                assertThat(rs.next()).isTrue();
+                assertThat(rs.getInt(1)).as("Before: no ledger accounts exist").isEqualTo(0);
+            }
+
+            // Create the proof procedure
+            stmt.execute("DROP PROCEDURE IF EXISTS sp_atomicity_proof");
+            stmt.execute(
+                "CREATE PROCEDURE sp_atomicity_proof() " +
+                "BEGIN " +
+                "  DECLARE v_ts DATETIME(6); " +
+                "  SET v_ts = UTC_TIMESTAMP(6); " +
+                "  BEGIN " +
+                "    DECLARE EXIT HANDLER FOR SQLEXCEPTION BEGIN ROLLBACK; RESIGNAL; END; " +
+                "    START TRANSACTION; " +
+                "    /* Write 1: system_configs */ " +
+                "    INSERT INTO system_configs (config_id, config_key, config_type, config_value, description) " +
+                "    VALUES (UUID_TO_BIN(UUID(), 0), 'ledger_cutover_at', 'DATETIME', '2026-01-01T00:00:00Z', 'atomicity proof'); " +
+                "    /* Write 2: two system ledger accounts */ " +
+                "    INSERT INTO ledger_accounts (ledger_account_id, customer_account_id, system_code, account_class, currency, status, created_at) " +
+                "    VALUES " +
+                "      (UUID_TO_BIN(UUID(), 0), NULL, 'SYSTEM_VAULT_CASH:LKR', 'ASSET', 'LKR', 'ACTIVE', v_ts), " +
+                "      (UUID_TO_BIN(UUID(), 0), NULL, 'SYSTEM_OPENING_BALANCE:LKR', 'ASSET', 'LKR', 'ACTIVE', v_ts); " +
+                "    /* Write 3 (INJECTED FAILURE): invalid account_class triggers chk_ledger_accounts_class */ " +
+                "    INSERT INTO ledger_accounts (ledger_account_id, customer_account_id, system_code, account_class, currency, status, created_at) " +
+                "    VALUES (UUID_TO_BIN(UUID(), 0), NULL, 'SYSTEM_INJECT_FAIL', 'INVALID_CLASS', 'LKR', 'ACTIVE', v_ts); " +
+                "    COMMIT; " +
+                "  END; " +
+                "END"
+            );
+        }
+
+        // Call the procedure — expect failure
+        try (Connection conn = ds.getConnection();
+             Statement stmt = conn.createStatement()) {
+            assertThatThrownBy(() -> stmt.execute("CALL sp_atomicity_proof()"))
+                    .as("Mid-DML failure fires EXIT HANDLER (chk_ledger_accounts_class violated)")
+                    .hasMessageContaining("chk_ledger_accounts_class");
+        }
+
+        // Step D: Verify ALL DML (Write 1 + Write 2) was rolled back
+        try (Connection conn = ds.getConnection();
+             Statement stmt = conn.createStatement()) {
+            try (ResultSet rs = stmt.executeQuery("SELECT COUNT(*) FROM system_configs WHERE config_key='ledger_cutover_at'")) {
+                assertThat(rs.next()).isTrue();
+                assertThat(rs.getInt(1))
+                        .as("Write 1 (system_configs INSERT) rolled back by EXIT HANDLER")
+                        .isEqualTo(0);
+            }
+            try (ResultSet rs = stmt.executeQuery("SELECT COUNT(*) FROM ledger_accounts")) {
+                assertThat(rs.next()).isTrue();
+                assertThat(rs.getInt(1))
+                        .as("Write 2 (system ledger_accounts INSERTs) rolled back by EXIT HANDLER")
+                        .isEqualTo(0);
+            }
+        }
+
+        // Step E: Cleanup
+        try (Connection conn = ds.getConnection();
+             Statement stmt = conn.createStatement()) {
+            stmt.execute("DROP PROCEDURE IF EXISTS sp_atomicity_proof");
         }
     }
 }

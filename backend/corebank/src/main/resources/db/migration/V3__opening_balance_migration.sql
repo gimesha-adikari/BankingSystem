@@ -2,11 +2,13 @@
 -- V3__opening_balance_migration.sql
 --
 -- Slice 4B-2: Opening Balance Migration & Ledger Cutover
+-- Corrected in Slice 4B-2.1: case-sensitive currency precondition + explicit
+-- transaction atomicity with DECLARE EXIT HANDLER FOR SQLEXCEPTION.
 --
 -- Responsibilities:
 -- 1. Fail-fast validation of legacy pre-conditions:
 --    - Reject negative balances (accounts.balance < 0).
---    - Reject non-LKR currencies.
+--    - Reject non-LKR currencies (case-sensitive binary comparison).
 --    - Reject pre-existing cutover markers or partial ledger data.
 -- 2. Capture a single deterministic UTC cutover timestamp.
 -- 3. Persist ledger_cutover_at marker in system_configs.
@@ -20,6 +22,14 @@
 --    - Posting 1: CREDIT customer liability account
 -- 8. Zero changes to legacy transactions table.
 -- 9. Zero changes to accounts.balance.
+--
+-- ATOMICITY GUARANTEE:
+-- The procedure uses two-phase logic:
+--   Phase 1 (pre-transaction): precondition SELECTs and SIGNALs — fail fast before DML.
+--   Phase 2 (transaction): all DML wrapped in START TRANSACTION / COMMIT with a
+--   DECLARE EXIT HANDLER FOR SQLEXCEPTION that rolls back and resignals on any mid-DML
+--   error. The DECLARE must appear at the top of the inner BEGIN...END transaction block.
+-- The outer CREATE/DROP PROCEDURE DDL auto-commits and is outside the data transaction.
 -- ==============================================================================
 
 DROP PROCEDURE IF EXISTS `sp_migrate_opening_balances`;
@@ -40,7 +50,9 @@ BEGIN
   DECLARE v_config_id BINARY(16);
 
   -- --------------------------------------------------------------------------
-  -- 1. Precondition checks (Fail fast before any DML)
+  -- PHASE 1: Precondition checks (read-only, before any DML or transaction)
+  -- All checks run before the transaction opens. On failure, SIGNAL aborts
+  -- the procedure before any writes occur.
   -- --------------------------------------------------------------------------
 
   -- Check A: Reject negative balances
@@ -50,11 +62,12 @@ BEGIN
       SET MESSAGE_TEXT = 'Precondition failed: Negative account balance detected in legacy accounts';
   END IF;
 
-  -- Check B: Reject non-LKR currencies
-  SELECT COUNT(*) INTO v_non_lkr_count FROM `accounts` WHERE `currency` != 'LKR';
+  -- Check B: Reject non-LKR currencies (BINARY cast = case-sensitive comparison).
+  -- 'lkr', 'Lkr', 'LKr' etc. are treated as non-LKR and cause failure.
+  SELECT COUNT(*) INTO v_non_lkr_count FROM `accounts` WHERE BINARY `currency` != 'LKR';
   IF v_non_lkr_count > 0 THEN
     SIGNAL SQLSTATE '45000'
-      SET MESSAGE_TEXT = 'Precondition failed: Non-LKR account currency detected';
+      SET MESSAGE_TEXT = 'Precondition failed: Non-LKR account currency detected (case-sensitive check)';
   END IF;
 
   -- Check C: Reject pre-existing cutover marker
@@ -84,144 +97,157 @@ BEGIN
   END IF;
 
   -- --------------------------------------------------------------------------
-  -- 2. Capture Single Cutover Timestamp & Identifiers
+  -- PHASE 2: Capture identifiers then execute all DML inside explicit transaction.
+  -- The DECLARE EXIT HANDLER must appear at the top of the nested BEGIN block.
   -- --------------------------------------------------------------------------
   SET v_cutover_time = UTC_TIMESTAMP(6);
   SET v_opening_asset_id = UUID_TO_BIN(UUID(), 0);
   SET v_vault_cash_id = UUID_TO_BIN(UUID(), 0);
   SET v_config_id = UUID_TO_BIN(UUID(), 0);
 
-  -- --------------------------------------------------------------------------
-  -- 3. Persist Cutover Timestamp in system_configs
-  -- --------------------------------------------------------------------------
-  INSERT INTO `system_configs` (`config_id`, `config_key`, `config_type`, `config_value`, `description`)
-  VALUES (
-    v_config_id,
-    'ledger_cutover_at',
-    'DATETIME',
-    DATE_FORMAT(v_cutover_time, '%Y-%m-%dT%H:%i:%s.%fZ'),
-    'Timestamp recording when double-entry ledger authority began'
-  );
+  BEGIN
+    DECLARE EXIT HANDLER FOR SQLEXCEPTION
+    BEGIN
+      ROLLBACK;
+      RESIGNAL;
+    END;
 
-  -- --------------------------------------------------------------------------
-  -- 4. Create System Asset Accounts
-  -- --------------------------------------------------------------------------
-  INSERT INTO `ledger_accounts` (
-    `ledger_account_id`, `customer_account_id`, `system_code`,
-    `account_class`, `currency`, `status`, `created_at`
-  )
-  VALUES 
-    (v_vault_cash_id, NULL, 'SYSTEM_VAULT_CASH:LKR', 'ASSET', 'LKR', 'ACTIVE', v_cutover_time),
-    (v_opening_asset_id, NULL, 'SYSTEM_OPENING_BALANCE:LKR', 'ASSET', 'LKR', 'ACTIVE', v_cutover_time);
+    START TRANSACTION;
 
-  -- --------------------------------------------------------------------------
-  -- 5. Create Customer LIABILITY Ledger Accounts (1:1 mapping)
-  -- --------------------------------------------------------------------------
-  INSERT INTO `ledger_accounts` (
-    `ledger_account_id`, `customer_account_id`, `system_code`,
-    `account_class`, `currency`, `status`, `created_at`
-  )
-  SELECT 
-    UUID_TO_BIN(UUID(), 0),
-    a.`account_id`,
-    NULL,
-    'LIABILITY',
-    a.`currency`,
-    CASE 
-      WHEN a.`account_status` = 'ACTIVE' THEN 'ACTIVE'
-      WHEN a.`account_status` = 'FROZEN' THEN 'FROZEN'
-      WHEN a.`account_status` = 'CLOSED' THEN 'CLOSED'
-      ELSE 'ACTIVE'
-    END,
-    v_cutover_time
-  FROM `accounts` a;
+    -- ------------------------------------------------------------------------
+    -- 3. Persist Cutover Timestamp in system_configs
+    -- ------------------------------------------------------------------------
+    INSERT INTO `system_configs` (`config_id`, `config_key`, `config_type`, `config_value`, `description`)
+    VALUES (
+      v_config_id,
+      'ledger_cutover_at',
+      'DATETIME',
+      DATE_FORMAT(v_cutover_time, '%Y-%m-%dT%H:%i:%s.%fZ'),
+      'Timestamp recording when double-entry ledger authority began'
+    );
 
-  -- --------------------------------------------------------------------------
-  -- 6. Create OPENING_BALANCE Journal Entries (Only for balance > 0)
-  -- --------------------------------------------------------------------------
-  INSERT INTO `journal_entries` (
-    `entry_id`,
-    `entry_reference`,
-    `entry_type`,
-    `status`,
-    `currency`,
-    `total_amount`,
-    `description`,
-    `reversal_of_entry_id`,
-    `actor_type`,
-    `initiated_by_user_id`,
-    `system_actor_id`,
-    `channel`,
-    `posted_at`
-  )
-  SELECT 
-    UUID_TO_BIN(UUID(), 0),
-    CONCAT('CUTOVER-', LOWER(HEX(a.`account_id`))),
-    'OPENING_BALANCE',
-    'POSTED',
-    a.`currency`,
-    a.`balance`,
-    CONCAT('Opening balance cutover for account ', a.`account_number`),
-    NULL,
-    'SYSTEM',
-    NULL,
-    'MIGRATION_CUTOVER',
-    'SYSTEM',
-    v_cutover_time
-  FROM `accounts` a
-  WHERE a.`balance` > 0;
+    -- ------------------------------------------------------------------------
+    -- 4. Create System Asset Accounts
+    -- ------------------------------------------------------------------------
+    INSERT INTO `ledger_accounts` (
+      `ledger_account_id`, `customer_account_id`, `system_code`,
+      `account_class`, `currency`, `status`, `created_at`
+    )
+    VALUES 
+      (v_vault_cash_id, NULL, 'SYSTEM_VAULT_CASH:LKR', 'ASSET', 'LKR', 'ACTIVE', v_cutover_time),
+      (v_opening_asset_id, NULL, 'SYSTEM_OPENING_BALANCE:LKR', 'ASSET', 'LKR', 'ACTIVE', v_cutover_time);
 
-  -- --------------------------------------------------------------------------
-  -- 7. Create Posting 0: DEBIT SYSTEM_OPENING_BALANCE:LKR
-  -- --------------------------------------------------------------------------
-  INSERT INTO `journal_postings` (
-    `posting_id`,
-    `entry_id`,
-    `ledger_account_id`,
-    `sequence_number`,
-    `direction`,
-    `amount`,
-    `currency`,
-    `created_at`
-  )
-  SELECT 
-    UUID_TO_BIN(UUID(), 0),
-    je.`entry_id`,
-    v_opening_asset_id,
-    0,
-    'DEBIT',
-    je.`total_amount`,
-    je.`currency`,
-    v_cutover_time
-  FROM `journal_entries` je
-  WHERE je.`entry_type` = 'OPENING_BALANCE' AND je.`system_actor_id` = 'MIGRATION_CUTOVER';
+    -- ------------------------------------------------------------------------
+    -- 5. Create Customer LIABILITY Ledger Accounts (1:1 mapping)
+    -- ------------------------------------------------------------------------
+    INSERT INTO `ledger_accounts` (
+      `ledger_account_id`, `customer_account_id`, `system_code`,
+      `account_class`, `currency`, `status`, `created_at`
+    )
+    SELECT 
+      UUID_TO_BIN(UUID(), 0),
+      a.`account_id`,
+      NULL,
+      'LIABILITY',
+      a.`currency`,
+      CASE 
+        WHEN a.`account_status` = 'ACTIVE' THEN 'ACTIVE'
+        WHEN a.`account_status` = 'FROZEN' THEN 'FROZEN'
+        WHEN a.`account_status` = 'CLOSED' THEN 'CLOSED'
+        ELSE 'ACTIVE'
+      END,
+      v_cutover_time
+    FROM `accounts` a;
 
-  -- --------------------------------------------------------------------------
-  -- 8. Create Posting 1: CREDIT Customer Liability Account
-  -- --------------------------------------------------------------------------
-  INSERT INTO `journal_postings` (
-    `posting_id`,
-    `entry_id`,
-    `ledger_account_id`,
-    `sequence_number`,
-    `direction`,
-    `amount`,
-    `currency`,
-    `created_at`
-  )
-  SELECT 
-    UUID_TO_BIN(UUID(), 0),
-    je.`entry_id`,
-    la.`ledger_account_id`,
-    1,
-    'CREDIT',
-    je.`total_amount`,
-    je.`currency`,
-    v_cutover_time
-  FROM `journal_entries` je
-  JOIN `accounts` a ON je.`entry_reference` = CONCAT('CUTOVER-', LOWER(HEX(a.`account_id`)))
-  JOIN `ledger_accounts` la ON la.`customer_account_id` = a.`account_id`
-  WHERE je.`entry_type` = 'OPENING_BALANCE' AND je.`system_actor_id` = 'MIGRATION_CUTOVER';
+    -- ------------------------------------------------------------------------
+    -- 6. Create OPENING_BALANCE Journal Entries (Only for balance > 0)
+    -- ------------------------------------------------------------------------
+    INSERT INTO `journal_entries` (
+      `entry_id`,
+      `entry_reference`,
+      `entry_type`,
+      `status`,
+      `currency`,
+      `total_amount`,
+      `description`,
+      `reversal_of_entry_id`,
+      `actor_type`,
+      `initiated_by_user_id`,
+      `system_actor_id`,
+      `channel`,
+      `posted_at`
+    )
+    SELECT 
+      UUID_TO_BIN(UUID(), 0),
+      CONCAT('CUTOVER-', LOWER(HEX(a.`account_id`))),
+      'OPENING_BALANCE',
+      'POSTED',
+      a.`currency`,
+      a.`balance`,
+      CONCAT('Opening balance cutover for account ', a.`account_number`),
+      NULL,
+      'SYSTEM',
+      NULL,
+      'MIGRATION_CUTOVER',
+      'SYSTEM',
+      v_cutover_time
+    FROM `accounts` a
+    WHERE a.`balance` > 0;
+
+    -- ------------------------------------------------------------------------
+    -- 7. Create Posting 0: DEBIT SYSTEM_OPENING_BALANCE:LKR
+    -- ------------------------------------------------------------------------
+    INSERT INTO `journal_postings` (
+      `posting_id`,
+      `entry_id`,
+      `ledger_account_id`,
+      `sequence_number`,
+      `direction`,
+      `amount`,
+      `currency`,
+      `created_at`
+    )
+    SELECT 
+      UUID_TO_BIN(UUID(), 0),
+      je.`entry_id`,
+      v_opening_asset_id,
+      0,
+      'DEBIT',
+      je.`total_amount`,
+      je.`currency`,
+      v_cutover_time
+    FROM `journal_entries` je
+    WHERE je.`entry_type` = 'OPENING_BALANCE' AND je.`system_actor_id` = 'MIGRATION_CUTOVER';
+
+    -- ------------------------------------------------------------------------
+    -- 8. Create Posting 1: CREDIT Customer Liability Account
+    -- ------------------------------------------------------------------------
+    INSERT INTO `journal_postings` (
+      `posting_id`,
+      `entry_id`,
+      `ledger_account_id`,
+      `sequence_number`,
+      `direction`,
+      `amount`,
+      `currency`,
+      `created_at`
+    )
+    SELECT 
+      UUID_TO_BIN(UUID(), 0),
+      je.`entry_id`,
+      la.`ledger_account_id`,
+      1,
+      'CREDIT',
+      je.`total_amount`,
+      je.`currency`,
+      v_cutover_time
+    FROM `journal_entries` je
+    JOIN `accounts` a ON je.`entry_reference` = CONCAT('CUTOVER-', LOWER(HEX(a.`account_id`)))
+    JOIN `ledger_accounts` la ON la.`customer_account_id` = a.`account_id`
+    WHERE je.`entry_type` = 'OPENING_BALANCE' AND je.`system_actor_id` = 'MIGRATION_CUTOVER';
+
+    COMMIT;
+  END;
 
 END$$
 DELIMITER ;
