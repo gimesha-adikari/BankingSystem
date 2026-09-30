@@ -6,11 +6,15 @@ spring:
     driver-class-name: com.mysql.cj.jdbc.Driver
   jpa:
     hibernate:
-      ddl-auto: ${JPA_DDL_AUTO:update}
+      ddl-auto: ${JPA_DDL_AUTO:validate}
     show-sql: ${JPA_SHOW_SQL:false}
     properties:
       hibernate:
         dialect: org.hibernate.dialect.MySQLDialect
+  flyway:
+    enabled: ${FLYWAY_ENABLED:true}
+    baseline-on-migrate: false
+    locations: classpath:db/migration
   mail:
     host: ${MAIL_HOST:127.0.0.1}
     port: ${MAIL_PORT:1025}

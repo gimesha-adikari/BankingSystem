@@ -1,3 +1,10 @@
 spring:
   profiles:
     active: dev
+  flyway:
+    enabled: true
+    baseline-on-migrate: false
+    locations: classpath:db/migration
+  jpa:
+    hibernate:
+      ddl-auto: validate
