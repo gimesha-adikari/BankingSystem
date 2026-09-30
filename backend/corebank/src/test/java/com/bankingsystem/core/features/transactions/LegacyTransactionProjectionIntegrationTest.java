@@ -50,6 +50,9 @@ public class LegacyTransactionProjectionIntegrationTest {
     private PostingEngine postingEngine;
 
     @Autowired
+    private com.bankingsystem.core.features.transactions.application.LegacyTransactionProjectionService legacyTransactionProjectionService;
+
+    @Autowired
     private LedgerReconciliationService reconciliationService;
 
     @Autowired
@@ -580,7 +583,39 @@ public class LegacyTransactionProjectionIntegrationTest {
     }
 
     // =========================================================================
-    // TEST 9: Unsupported projection topologies fail safely
+    // TEST 9: Mandatory transaction boundary enforcement
+    // =========================================================================
+    @Test
+    void testDirectProjectionServiceCallWithoutActiveTransactionThrowsException() {
+        JournalEntry dummyEntry = new JournalEntry(
+                UUID.randomUUID(),
+                "TX-DUMMY",
+                JournalEntryType.DEPOSIT,
+                JournalEntryStatus.POSTED,
+                "LKR",
+                new BigDecimal("10.0000"),
+                "Unmanaged projection test",
+                null,
+                LedgerActorType.USER,
+                realUserId,
+                null,
+                LedgerChannel.WEB,
+                LocalDateTime.now(ZoneOffset.UTC)
+        );
+
+        long txCountBefore = transactionRepository.count();
+
+        assertThatThrownBy(() -> legacyTransactionProjectionService.projectTransactions(
+                dummyEntry,
+                Map.of(),
+                Map.of()
+        )).isInstanceOf(org.springframework.transaction.IllegalTransactionStateException.class);
+
+        assertThat(transactionRepository.count()).isEqualTo(txCountBefore);
+    }
+
+    // =========================================================================
+    // TEST 10: Unsupported projection topologies fail safely and rollback
     // =========================================================================
     @Test
     void unsupportedProjectionTopologiesFailSafely() {
@@ -600,5 +635,281 @@ public class LegacyTransactionProjectionIntegrationTest {
         assertThatThrownBy(() -> postingEngine.post(sysToSys))
                 .isInstanceOf(BusinessException.class)
                 .satisfies(ex -> assertThat(((BusinessException) ex).getCode()).isEqualTo("ERR_UNSUPPORTED_PROJECTION"));
+    }
+
+    @Test
+    void testDepositTopologyRejectionsAndRollback() {
+        Account accA = createCustomerAccount("8888000101", new BigDecimal("100.0000"), "LKR");
+        Account accB = createCustomerAccount("8888000102", new BigDecimal("100.0000"), "LKR");
+        LedgerAccount laA = ledgerAccountRepository.findByCustomerAccountId(accA.getAccountId()).orElseThrow();
+        LedgerAccount laB = ledgerAccountRepository.findByCustomerAccountId(accB.getAccountId()).orElseThrow();
+
+        long initialJournals = journalEntryRepository.count();
+        long initialPostings = journalPostingRepository.count();
+        long initialTxs = transactionRepository.count();
+
+        // 1. DEPOSIT with two customer accounts
+        PostingCommand twoAccDeposit = new PostingCommand(
+                JournalEntryType.DEPOSIT,
+                CurrencyCode.LKR,
+                "Two customer accounts deposit",
+                PostingActor.user(realUserId),
+                LedgerChannel.WEB,
+                List.of(
+                        new PostingInstruction(vaultCashLedgerAccount.getLedgerAccountId(), PostingDirection.DEBIT, MonetaryAmount.fromCustomerInput("50.00", CurrencyCode.LKR)),
+                        new PostingInstruction(laA.getLedgerAccountId(), PostingDirection.CREDIT, MonetaryAmount.fromCustomerInput("25.00", CurrencyCode.LKR)),
+                        new PostingInstruction(laB.getLedgerAccountId(), PostingDirection.CREDIT, MonetaryAmount.fromCustomerInput("25.00", CurrencyCode.LKR))
+                )
+        );
+
+        assertThatThrownBy(() -> postingEngine.post(twoAccDeposit))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(ex -> assertThat(((BusinessException) ex).getCode()).isEqualTo("ERR_UNSUPPORTED_PROJECTION"));
+
+        // Verify rollback: balances, journals, postings, transactions untouched
+        assertThat(accountRepository.findById(accA.getAccountId()).get().getBalance()).isEqualByComparingTo("100.0000");
+        assertThat(accountRepository.findById(accB.getAccountId()).get().getBalance()).isEqualByComparingTo("100.0000");
+        assertThat(journalEntryRepository.count()).isEqualTo(initialJournals);
+        assertThat(journalPostingRepository.count()).isEqualTo(initialPostings);
+        assertThat(transactionRepository.count()).isEqualTo(initialTxs);
+
+        // 2. DEPOSIT with customer net effect negative (Account A debited)
+        PostingCommand negativeDeposit = new PostingCommand(
+                JournalEntryType.DEPOSIT,
+                CurrencyCode.LKR,
+                "Negative net customer deposit",
+                PostingActor.user(realUserId),
+                LedgerChannel.WEB,
+                List.of(
+                        new PostingInstruction(laA.getLedgerAccountId(), PostingDirection.DEBIT, MonetaryAmount.fromCustomerInput("20.00", CurrencyCode.LKR)),
+                        new PostingInstruction(vaultCashLedgerAccount.getLedgerAccountId(), PostingDirection.CREDIT, MonetaryAmount.fromCustomerInput("20.00", CurrencyCode.LKR))
+                )
+        );
+
+        assertThatThrownBy(() -> postingEngine.post(negativeDeposit))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(ex -> assertThat(((BusinessException) ex).getCode()).isEqualTo("ERR_UNSUPPORTED_PROJECTION"));
+
+        // Verify rollback
+        assertThat(accountRepository.findById(accA.getAccountId()).get().getBalance()).isEqualByComparingTo("100.0000");
+        assertThat(journalEntryRepository.count()).isEqualTo(initialJournals);
+        assertThat(journalPostingRepository.count()).isEqualTo(initialPostings);
+        assertThat(transactionRepository.count()).isEqualTo(initialTxs);
+    }
+
+    @Test
+    void testWithdrawalTopologyRejectionsAndRollback() {
+        Account accA = createCustomerAccount("8888000201", new BigDecimal("200.0000"), "LKR");
+        Account accB = createCustomerAccount("8888000202", new BigDecimal("200.0000"), "LKR");
+        LedgerAccount laA = ledgerAccountRepository.findByCustomerAccountId(accA.getAccountId()).orElseThrow();
+        LedgerAccount laB = ledgerAccountRepository.findByCustomerAccountId(accB.getAccountId()).orElseThrow();
+
+        long initialJournals = journalEntryRepository.count();
+        long initialPostings = journalPostingRepository.count();
+        long initialTxs = transactionRepository.count();
+
+        // 1. WITHDRAWAL with two customer accounts
+        PostingCommand twoAccWithdrawal = new PostingCommand(
+                JournalEntryType.WITHDRAWAL,
+                CurrencyCode.LKR,
+                "Two customer accounts withdrawal",
+                PostingActor.user(realUserId),
+                LedgerChannel.WEB,
+                List.of(
+                        new PostingInstruction(laA.getLedgerAccountId(), PostingDirection.DEBIT, MonetaryAmount.fromCustomerInput("25.00", CurrencyCode.LKR)),
+                        new PostingInstruction(laB.getLedgerAccountId(), PostingDirection.DEBIT, MonetaryAmount.fromCustomerInput("25.00", CurrencyCode.LKR)),
+                        new PostingInstruction(vaultCashLedgerAccount.getLedgerAccountId(), PostingDirection.CREDIT, MonetaryAmount.fromCustomerInput("50.00", CurrencyCode.LKR))
+                )
+        );
+
+        assertThatThrownBy(() -> postingEngine.post(twoAccWithdrawal))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(ex -> assertThat(((BusinessException) ex).getCode()).isEqualTo("ERR_UNSUPPORTED_PROJECTION"));
+
+        // Verify rollback
+        assertThat(accountRepository.findById(accA.getAccountId()).get().getBalance()).isEqualByComparingTo("200.0000");
+        assertThat(accountRepository.findById(accB.getAccountId()).get().getBalance()).isEqualByComparingTo("200.0000");
+        assertThat(journalEntryRepository.count()).isEqualTo(initialJournals);
+        assertThat(journalPostingRepository.count()).isEqualTo(initialPostings);
+        assertThat(transactionRepository.count()).isEqualTo(initialTxs);
+
+        // 2. WITHDRAWAL with customer net effect positive (Account A credited)
+        PostingCommand positiveWithdrawal = new PostingCommand(
+                JournalEntryType.WITHDRAWAL,
+                CurrencyCode.LKR,
+                "Positive customer net withdrawal",
+                PostingActor.user(realUserId),
+                LedgerChannel.WEB,
+                List.of(
+                        new PostingInstruction(vaultCashLedgerAccount.getLedgerAccountId(), PostingDirection.DEBIT, MonetaryAmount.fromCustomerInput("20.00", CurrencyCode.LKR)),
+                        new PostingInstruction(laA.getLedgerAccountId(), PostingDirection.CREDIT, MonetaryAmount.fromCustomerInput("20.00", CurrencyCode.LKR))
+                )
+        );
+
+        assertThatThrownBy(() -> postingEngine.post(positiveWithdrawal))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(ex -> assertThat(((BusinessException) ex).getCode()).isEqualTo("ERR_UNSUPPORTED_PROJECTION"));
+
+        // Verify rollback
+        assertThat(accountRepository.findById(accA.getAccountId()).get().getBalance()).isEqualByComparingTo("200.0000");
+        assertThat(journalEntryRepository.count()).isEqualTo(initialJournals);
+        assertThat(journalPostingRepository.count()).isEqualTo(initialPostings);
+        assertThat(transactionRepository.count()).isEqualTo(initialTxs);
+    }
+
+    @Test
+    void testTransferTopologyRejectionsAndRollback() {
+        Account accA = createCustomerAccount("8888000301", new BigDecimal("500.0000"), "LKR");
+        Account accB = createCustomerAccount("8888000302", new BigDecimal("500.0000"), "LKR");
+        Account accC = createCustomerAccount("8888000303", new BigDecimal("500.0000"), "LKR");
+        LedgerAccount laA = ledgerAccountRepository.findByCustomerAccountId(accA.getAccountId()).orElseThrow();
+        LedgerAccount laB = ledgerAccountRepository.findByCustomerAccountId(accB.getAccountId()).orElseThrow();
+        LedgerAccount laC = ledgerAccountRepository.findByCustomerAccountId(accC.getAccountId()).orElseThrow();
+
+        long initialJournals = journalEntryRepository.count();
+        long initialPostings = journalPostingRepository.count();
+        long initialTxs = transactionRepository.count();
+
+        // 1. Same customer account on both sides (net customer count = 1)
+        PostingCommand sameAccountTransfer = new PostingCommand(
+                JournalEntryType.TRANSFER,
+                CurrencyCode.LKR,
+                "Same account transfer",
+                PostingActor.user(realUserId),
+                LedgerChannel.WEB,
+                List.of(
+                        new PostingInstruction(laA.getLedgerAccountId(), PostingDirection.DEBIT, MonetaryAmount.fromCustomerInput("50.00", CurrencyCode.LKR)),
+                        new PostingInstruction(laA.getLedgerAccountId(), PostingDirection.CREDIT, MonetaryAmount.fromCustomerInput("50.00", CurrencyCode.LKR))
+                )
+        );
+        assertThatThrownBy(() -> postingEngine.post(sameAccountTransfer))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(ex -> assertThat(((BusinessException) ex).getCode()).isEqualTo("ERR_UNSUPPORTED_PROJECTION"));
+
+        // 2. More than two customer accounts (>2)
+        PostingCommand threeAccTransfer = new PostingCommand(
+                JournalEntryType.TRANSFER,
+                CurrencyCode.LKR,
+                "Three account transfer",
+                PostingActor.user(realUserId),
+                LedgerChannel.WEB,
+                List.of(
+                        new PostingInstruction(laA.getLedgerAccountId(), PostingDirection.DEBIT, MonetaryAmount.fromCustomerInput("50.00", CurrencyCode.LKR)),
+                        new PostingInstruction(laB.getLedgerAccountId(), PostingDirection.CREDIT, MonetaryAmount.fromCustomerInput("25.00", CurrencyCode.LKR)),
+                        new PostingInstruction(laC.getLedgerAccountId(), PostingDirection.CREDIT, MonetaryAmount.fromCustomerInput("25.00", CurrencyCode.LKR))
+                )
+        );
+        assertThatThrownBy(() -> postingEngine.post(threeAccTransfer))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(ex -> assertThat(((BusinessException) ex).getCode()).isEqualTo("ERR_UNSUPPORTED_PROJECTION"));
+
+        // 3. Both customer net effects positive (vault debited, both customers credited)
+        PostingCommand bothPositiveTransfer = new PostingCommand(
+                JournalEntryType.TRANSFER,
+                CurrencyCode.LKR,
+                "Both positive transfer",
+                PostingActor.user(realUserId),
+                LedgerChannel.WEB,
+                List.of(
+                        new PostingInstruction(vaultCashLedgerAccount.getLedgerAccountId(), PostingDirection.DEBIT, MonetaryAmount.fromCustomerInput("50.00", CurrencyCode.LKR)),
+                        new PostingInstruction(laA.getLedgerAccountId(), PostingDirection.CREDIT, MonetaryAmount.fromCustomerInput("25.00", CurrencyCode.LKR)),
+                        new PostingInstruction(laB.getLedgerAccountId(), PostingDirection.CREDIT, MonetaryAmount.fromCustomerInput("25.00", CurrencyCode.LKR))
+                )
+        );
+        assertThatThrownBy(() -> postingEngine.post(bothPositiveTransfer))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(ex -> assertThat(((BusinessException) ex).getCode()).isEqualTo("ERR_UNSUPPORTED_PROJECTION"));
+
+        // 4. Both customer net effects negative (both customers debited, vault credited)
+        PostingCommand bothNegativeTransfer = new PostingCommand(
+                JournalEntryType.TRANSFER,
+                CurrencyCode.LKR,
+                "Both negative transfer",
+                PostingActor.user(realUserId),
+                LedgerChannel.WEB,
+                List.of(
+                        new PostingInstruction(laA.getLedgerAccountId(), PostingDirection.DEBIT, MonetaryAmount.fromCustomerInput("25.00", CurrencyCode.LKR)),
+                        new PostingInstruction(laB.getLedgerAccountId(), PostingDirection.DEBIT, MonetaryAmount.fromCustomerInput("25.00", CurrencyCode.LKR)),
+                        new PostingInstruction(vaultCashLedgerAccount.getLedgerAccountId(), PostingDirection.CREDIT, MonetaryAmount.fromCustomerInput("50.00", CurrencyCode.LKR))
+                )
+        );
+        assertThatThrownBy(() -> postingEngine.post(bothNegativeTransfer))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(ex -> assertThat(((BusinessException) ex).getCode()).isEqualTo("ERR_UNSUPPORTED_PROJECTION"));
+
+        // 5. Unequal absolute source/destination effects (A debited 50, B credited 40, vault credited 10)
+        PostingCommand unequalTransfer = new PostingCommand(
+                JournalEntryType.TRANSFER,
+                CurrencyCode.LKR,
+                "Unequal transfer amounts",
+                PostingActor.user(realUserId),
+                LedgerChannel.WEB,
+                List.of(
+                        new PostingInstruction(laA.getLedgerAccountId(), PostingDirection.DEBIT, MonetaryAmount.fromCustomerInput("50.00", CurrencyCode.LKR)),
+                        new PostingInstruction(laB.getLedgerAccountId(), PostingDirection.CREDIT, MonetaryAmount.fromCustomerInput("40.00", CurrencyCode.LKR)),
+                        new PostingInstruction(vaultCashLedgerAccount.getLedgerAccountId(), PostingDirection.CREDIT, MonetaryAmount.fromCustomerInput("10.00", CurrencyCode.LKR))
+                )
+        );
+        assertThatThrownBy(() -> postingEngine.post(unequalTransfer))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(ex -> assertThat(((BusinessException) ex).getCode()).isEqualTo("ERR_UNSUPPORTED_PROJECTION"));
+
+        // All rejections verify rollback: balances untouched, 0 journals, 0 postings, 0 transactions
+        assertThat(accountRepository.findById(accA.getAccountId()).get().getBalance()).isEqualByComparingTo("500.0000");
+        assertThat(accountRepository.findById(accB.getAccountId()).get().getBalance()).isEqualByComparingTo("500.0000");
+        assertThat(accountRepository.findById(accC.getAccountId()).get().getBalance()).isEqualByComparingTo("500.0000");
+        assertThat(journalEntryRepository.count()).isEqualTo(initialJournals);
+        assertThat(journalPostingRepository.count()).isEqualTo(initialPostings);
+        assertThat(transactionRepository.count()).isEqualTo(initialTxs);
+    }
+
+    // =========================================================================
+    // TEST 11: Multiple posting legs for one customer aggregates into single projection row
+    // =========================================================================
+    @Test
+    void testMultiplePostingLegsForSameCustomerAggregatesIntoSingleProjectionRow() {
+        Account accA = createCustomerAccount("8888000401", BigDecimal.ZERO, "LKR");
+        LedgerAccount laA = ledgerAccountRepository.findByCustomerAccountId(accA.getAccountId()).orElseThrow();
+
+        // Internal balanced deposit with 2 posting legs for the same customer account:
+        // Leg 1: Customer A credit 20.00
+        // Leg 2: Customer A credit 30.00
+        // System vault cash: debit 50.00
+        PostingCommand multiLegDeposit = new PostingCommand(
+                JournalEntryType.DEPOSIT,
+                CurrencyCode.LKR,
+                "Multi-leg deposit for single customer",
+                PostingActor.user(realUserId),
+                LedgerChannel.WEB,
+                List.of(
+                        new PostingInstruction(vaultCashLedgerAccount.getLedgerAccountId(), PostingDirection.DEBIT, MonetaryAmount.fromCustomerInput("50.00", CurrencyCode.LKR)),
+                        new PostingInstruction(laA.getLedgerAccountId(), PostingDirection.CREDIT, MonetaryAmount.fromCustomerInput("20.00", CurrencyCode.LKR)),
+                        new PostingInstruction(laA.getLedgerAccountId(), PostingDirection.CREDIT, MonetaryAmount.fromCustomerInput("30.00", CurrencyCode.LKR))
+                )
+        );
+
+        PostingResult result = postingEngine.post(multiLegDeposit);
+
+        // Verify account balance updated to 50.0000
+        Account updatedAcc = accountRepository.findById(accA.getAccountId()).orElseThrow();
+        assertThat(updatedAcc.getBalance()).isEqualByComparingTo("50.0000");
+
+        // Verify journal entry & postings persisted
+        assertThat(journalEntryRepository.findById(result.getEntryId())).isPresent();
+        assertThat(journalPostingRepository.findByEntryIdOrderBySequenceNumberAsc(result.getEntryId())).hasSize(3);
+
+        // Verify EXACTLY ONE legacy transaction projection row created for this account and entry
+        List<Transaction> txList = transactionRepository.findByAccountAccountIdOrderByCreatedAtDesc(accA.getAccountId());
+        assertThat(txList).hasSize(1);
+
+        Transaction tx = txList.get(0);
+        assertThat(tx.getJournalEntryId()).isEqualTo(result.getEntryId());
+        assertThat(tx.getType()).isEqualTo(Transaction.TransactionType.DEPOSIT);
+        assertThat(tx.getAmount()).isEqualByComparingTo("50.0000");
+        assertThat(tx.getBalanceAfter()).isEqualByComparingTo("50.0000");
+
+        // Reconciliation clean
+        LedgerReconciliationResult recResult = reconciliationService.reconcileAccount(accA.getAccountId());
+        assertThat(recResult.isClean()).isTrue();
     }
 }

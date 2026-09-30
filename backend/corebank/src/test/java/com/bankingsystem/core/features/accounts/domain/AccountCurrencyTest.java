@@ -18,4 +18,10 @@ class AccountCurrencyTest {
         account.setCurrency("USD");
         assertThat(account.getCurrency()).isEqualTo("USD");
     }
+
+    @Test
+    void newlyConstructedAccountDefaultsToZeroBalance() {
+        Account account = new Account();
+        assertThat(account.getBalance()).isEqualByComparingTo("0.0000");
+    }
 }
