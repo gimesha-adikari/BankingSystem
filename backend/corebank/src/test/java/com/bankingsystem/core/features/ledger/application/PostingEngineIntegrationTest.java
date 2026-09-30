@@ -117,7 +117,9 @@ public class PostingEngineIntegrationTest {
              Statement stmt = conn.createStatement()) {
             stmt.execute("DROP TRIGGER IF EXISTS trg_test_fail_postings");
             stmt.execute("DROP TRIGGER IF EXISTS trg_test_fail_account");
+            stmt.execute("DROP TRIGGER IF EXISTS trg_test_fail_transactions");
             stmt.execute("SET FOREIGN_KEY_CHECKS = 0");
+            stmt.execute("DELETE FROM transactions");
             stmt.execute("DELETE FROM journal_postings");
             stmt.execute("DELETE FROM journal_entries");
             stmt.execute("DELETE FROM ledger_accounts WHERE customer_account_id IS NOT NULL");
@@ -227,8 +229,8 @@ public class PostingEngineIntegrationTest {
         LedgerReconciliationResult recResult = reconciliationService.reconcileAll();
         assertThat(recResult.isClean()).isTrue();
 
-        // Verify legacy history untouched
-        assertThat(countTransactions()).isEqualTo(txBefore);
+        // Verify legacy history projected
+        assertThat(countTransactions()).isEqualTo(txBefore + 1);
         assertThat(countCoreIdempotency()).isEqualTo(idemBefore);
     }
 

@@ -10,6 +10,7 @@ import com.bankingsystem.core.features.ledger.domain.*;
 import com.bankingsystem.core.features.ledger.domain.repository.JournalEntryRepository;
 import com.bankingsystem.core.features.ledger.domain.repository.JournalPostingRepository;
 import com.bankingsystem.core.features.ledger.domain.repository.LedgerAccountRepository;
+import com.bankingsystem.core.features.transactions.application.LegacyTransactionProjectionService;
 import com.bankingsystem.core.modules.common.exceptions.BusinessException;
 import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
@@ -35,6 +36,7 @@ public class PostingEngineImpl implements PostingEngine {
     private final JournalEntryRepository journalEntryRepository;
     private final JournalPostingRepository journalPostingRepository;
     private final AccountRepository accountRepository;
+    private final LegacyTransactionProjectionService legacyTransactionProjectionService;
     private final EntityManager entityManager;
 
     @Override
@@ -184,7 +186,7 @@ public class PostingEngineImpl implements PostingEngine {
 
         // 9. Persist JournalEntry (Immutable)
         UUID entryId = UUID.randomUUID();
-        LocalDateTime postedAt = LocalDateTime.now(ZoneOffset.UTC);
+        LocalDateTime postedAt = LocalDateTime.now(ZoneOffset.UTC).truncatedTo(java.time.temporal.ChronoUnit.MICROS);
 
         JournalEntry journalEntry = new JournalEntry(
                 entryId,
@@ -219,6 +221,13 @@ public class PostingEngineImpl implements PostingEngine {
             );
             journalPostingRepository.save(posting);
         }
+
+        // 11. Create legacy Transaction projection rows (synchronous read model)
+        legacyTransactionProjectionService.projectTransactions(
+                journalEntry,
+                lockedCustomerAccounts,
+                aggregateDeltas
+        );
 
         // Flush all writes to database so constraint violations / triggers trigger rollback immediately
         entityManager.flush();

@@ -153,8 +153,8 @@ public class CoreLedgerMigrationTest {
         MigrateResult result = flyway.migrate();
 
         assertThat(result.success).isTrue();
-        assertThat(result.migrationsExecuted).isEqualTo(3);
-        assertThat(result.targetSchemaVersion).isEqualTo("3");
+        assertThat(result.migrationsExecuted).isEqualTo(4);
+        assertThat(result.targetSchemaVersion).isEqualTo("4");
 
         // Verify Hibernate validates the migrated schema without errors
         LocalContainerEntityManagerFactoryBean emfBean = new LocalContainerEntityManagerFactoryBean();
@@ -187,7 +187,7 @@ public class CoreLedgerMigrationTest {
 
         assertThat(result.success).isTrue();
         assertThat(result.migrationsExecuted).isEqualTo(0);
-        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("3");
+        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("4");
         flyway.validate();
     }
 
@@ -276,7 +276,7 @@ public class CoreLedgerMigrationTest {
                 .load();
         MigrateResult result = flywayFull.migrate();
         assertThat(result.success).isTrue();
-        assertThat(result.migrationsExecuted).isEqualTo(2);
+        assertThat(result.migrationsExecuted).isEqualTo(3);
 
         // Step D: Verify all 7 integrity invariants
         try (Connection conn = ds.getConnection();
@@ -813,6 +813,7 @@ public class CoreLedgerMigrationTest {
         Flyway flywayV3 = Flyway.configure()
                 .dataSource(ds)
                 .locations("classpath:db/migration")
+                .target("3")
                 .load();
 
         assertThatThrownBy(flywayV3::migrate)

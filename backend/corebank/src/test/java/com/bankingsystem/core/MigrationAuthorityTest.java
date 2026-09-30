@@ -96,8 +96,8 @@ public class MigrationAuthorityTest {
         MigrateResult result = flyway.migrate();
 
         assertThat(result.success).isTrue();
-        assertThat(result.migrationsExecuted).isEqualTo(3);
-        assertThat(result.targetSchemaVersion).isEqualTo("3");
+        assertThat(result.migrationsExecuted).isEqualTo(4);
+        assertThat(result.targetSchemaVersion).isEqualTo("4");
 
         // Verify 35 domain tables exist in clean DB (31 baseline + 4 ledger tables)
         try (Connection conn = ds.getConnection();
@@ -123,7 +123,7 @@ public class MigrationAuthorityTest {
 
         assertThat(secondResult.success).isTrue();
         assertThat(secondResult.migrationsExecuted).isEqualTo(0);
-        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("3");
+        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("4");
 
         // Validate should pass cleanly without throwing exception
         flyway.validate();
