@@ -96,16 +96,16 @@ public class MigrationAuthorityTest {
         MigrateResult result = flyway.migrate();
 
         assertThat(result.success).isTrue();
-        assertThat(result.migrationsExecuted).isEqualTo(1);
-        assertThat(result.targetSchemaVersion).isEqualTo("1");
+        assertThat(result.migrationsExecuted).isEqualTo(3);
+        assertThat(result.targetSchemaVersion).isEqualTo("3");
 
-        // Verify 31 domain tables exist in clean DB
+        // Verify 35 domain tables exist in clean DB (31 baseline + 4 ledger tables)
         try (Connection conn = ds.getConnection();
              Statement stmt = conn.createStatement();
              ResultSet rs = stmt.executeQuery(
                      "SELECT count(*) FROM information_schema.tables WHERE table_schema='" + CLEAN_DB_NAME + "' AND table_name != 'flyway_schema_history'")) {
             assertThat(rs.next()).isTrue();
-            assertThat(rs.getInt(1)).isEqualTo(31);
+            assertThat(rs.getInt(1)).isEqualTo(35);
         }
     }
 
@@ -123,7 +123,7 @@ public class MigrationAuthorityTest {
 
         assertThat(secondResult.success).isTrue();
         assertThat(secondResult.migrationsExecuted).isEqualTo(0);
-        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("1");
+        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("3");
 
         // Validate should pass cleanly without throwing exception
         flyway.validate();
