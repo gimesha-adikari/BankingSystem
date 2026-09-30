@@ -1,0 +1,7 @@
+package com.bankingsystem.core.features.transactions.interfaces.dto;
+
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
+import jakarta.validation.constraints.NotNull;
+import java.util.UUID;
+
+public record WithdrawalRequest(@NotNull UUID accountId, @NotNull @JsonDeserialize(using = StrictDecimalTextDeserializer.class) String amount) {}

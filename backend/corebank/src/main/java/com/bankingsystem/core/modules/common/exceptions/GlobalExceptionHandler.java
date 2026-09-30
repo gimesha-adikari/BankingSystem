@@ -8,12 +8,22 @@ import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ExceptionHandler;
+import com.bankingsystem.core.features.transactions.idempotency.domain.*;
+import com.bankingsystem.core.features.transactions.retry.FinancialTransactionRetryExhaustedException;
 
 import java.util.HashMap;
 import java.util.Map;
 
 @ControllerAdvice
 public class GlobalExceptionHandler {
+    @ExceptionHandler(IdempotencyConflictException.class)
+    public ResponseEntity<?> handleIdempotencyConflict(IdempotencyConflictException ex) { return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("code", ex.getCode(), "message", "Idempotency key was used with a different request")); }
+    @ExceptionHandler(IdempotencyInProgressException.class)
+    public ResponseEntity<?> handleIdempotencyProgress(IdempotencyInProgressException ex) { return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("code", ex.getCode(), "message", "A request with this idempotency key is still processing")); }
+    @ExceptionHandler(FinancialTransactionRetryExhaustedException.class)
+    public ResponseEntity<?> handleRetryExhausted(FinancialTransactionRetryExhaustedException ex) { return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(Map.of("code", "ERR_TRANSACTION_TEMPORARILY_UNAVAILABLE", "message", "The transaction is temporarily unavailable")); }
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<?> handleBadArgument(IllegalArgumentException ex) { return ResponseEntity.badRequest().body(Map.of("code", "ERR_VALIDATION", "message", "Invalid request")); }
 
     // Bean Validation errors
     @ExceptionHandler(MethodArgumentNotValidException.class)
