@@ -17,4 +17,10 @@ public interface PostingEngine {
      * @throws com.bankingsystem.core.modules.common.exceptions.BusinessException if business invariants are violated
      */
     PostingResult post(PostingCommand command);
+
+    /**
+     * Execute a full reversal from the immutable authoritative journal record.
+     * Generic {@link PostingCommand} callers cannot create REVERSAL entries.
+     */
+    ReversalPostingResult postReversal(ReversalCommand command);
 }

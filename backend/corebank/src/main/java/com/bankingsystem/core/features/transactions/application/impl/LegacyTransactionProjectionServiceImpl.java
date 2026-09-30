@@ -44,6 +44,28 @@ public class LegacyTransactionProjectionServiceImpl implements LegacyTransaction
         };
     }
 
+    @Override
+    @Transactional(propagation = Propagation.MANDATORY)
+    public List<Transaction> projectReversalTransactions(
+            JournalEntry reversalEntry,
+            JournalEntry originalEntry,
+            Map<UUID, Account> customerAccounts,
+            Map<UUID, BigDecimal> netDeltas
+    ) {
+        Objects.requireNonNull(reversalEntry, "reversalEntry must not be null");
+        Objects.requireNonNull(originalEntry, "originalEntry must not be null");
+        if (reversalEntry.getEntryType() != com.bankingsystem.core.features.ledger.domain.JournalEntryType.REVERSAL) {
+            throw new BusinessException("ERR_UNSUPPORTED_PROJECTION", "Reversal projection requires a REVERSAL journal");
+        }
+        return switch (originalEntry.getEntryType()) {
+            case DEPOSIT -> projectWithdrawal(reversalEntry, customerAccounts, netDeltas);
+            case WITHDRAWAL -> projectDeposit(reversalEntry, customerAccounts, netDeltas);
+            case TRANSFER -> projectTransfer(reversalEntry, customerAccounts, netDeltas);
+            default -> throw new BusinessException("ERR_UNSUPPORTED_PROJECTION",
+                    "Unsupported original type for reversal projection: " + originalEntry.getEntryType());
+        };
+    }
+
     private List<Transaction> projectDeposit(
             JournalEntry journalEntry,
             Map<UUID, Account> customerAccounts,

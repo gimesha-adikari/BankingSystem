@@ -30,4 +30,12 @@ public interface LegacyTransactionProjectionService {
             Map<UUID, Account> customerAccounts,
             Map<UUID, BigDecimal> netDeltas
     );
+
+    /** Projects inverse legacy history for a REVERSAL journal using the original type. */
+    List<Transaction> projectReversalTransactions(
+            JournalEntry reversalEntry,
+            JournalEntry originalEntry,
+            Map<UUID, Account> customerAccounts,
+            Map<UUID, BigDecimal> netDeltas
+    );
 }
