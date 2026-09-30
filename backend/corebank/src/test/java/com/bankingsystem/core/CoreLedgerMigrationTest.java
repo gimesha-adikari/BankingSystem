@@ -68,10 +68,11 @@ public class CoreLedgerMigrationTest {
     private static final String DB_USER = envOr("DB_USERNAME", "banking_dev");
     private static final String DB_PASS = envOr("DB_PASSWORD", "change-me-locally");
 
-    private static final String CLEAN_DB    = "banking_ledger_test_clean";
-    private static final String CUTOVER_DB  = "banking_ledger_test_cutover";
-    private static final String NEGATIVE_DB = "banking_ledger_test_negative";
-    private static final String ATOMIC_DB   = "banking_ledger_test_atomic";
+    private static final String CLEAN_DB          = "banking_ledger_test_clean";
+    private static final String CUTOVER_DB        = "banking_ledger_test_cutover";
+    private static final String NEGATIVE_DB       = "banking_ledger_test_negative";
+    private static final String ATOMIC_DB         = "banking_ledger_test_atomic";
+    private static final String REAL_V3_ATOMIC_DB = "banking_ledger_test_real_v3_atomic";
 
     private static String getJdbcUrl(String dbName) {
         return "jdbc:mysql://" + DB_HOST + ":" + DB_PORT + "/" + dbName
@@ -109,6 +110,8 @@ public class CoreLedgerMigrationTest {
             stmt.execute("CREATE DATABASE " + NEGATIVE_DB + " CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci");
             stmt.execute("DROP DATABASE IF EXISTS " + ATOMIC_DB);
             stmt.execute("CREATE DATABASE " + ATOMIC_DB + " CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci");
+            stmt.execute("DROP DATABASE IF EXISTS " + REAL_V3_ATOMIC_DB);
+            stmt.execute("CREATE DATABASE " + REAL_V3_ATOMIC_DB + " CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci");
         }
     }
 
@@ -121,6 +124,7 @@ public class CoreLedgerMigrationTest {
             stmt.execute("DROP DATABASE IF EXISTS " + CUTOVER_DB);
             stmt.execute("DROP DATABASE IF EXISTS " + NEGATIVE_DB);
             stmt.execute("DROP DATABASE IF EXISTS " + ATOMIC_DB);
+            stmt.execute("DROP DATABASE IF EXISTS " + REAL_V3_ATOMIC_DB);
         } catch (Exception ignored) {
         }
     }
@@ -731,6 +735,160 @@ public class CoreLedgerMigrationTest {
         try (Connection conn = ds.getConnection();
              Statement stmt = conn.createStatement()) {
             stmt.execute("DROP PROCEDURE IF EXISTS sp_atomicity_proof");
+        }
+    }
+
+    // =========================================================================
+    // TEST 8: Actual V3 migration execution with mid-cutover failure trigger
+    //         proves real V3 stored procedure transaction handler rolls back ALL
+    //         cutover DML executed prior to the journal_entries failure.
+    // =========================================================================
+    @Test
+    @Order(8)
+    void actualV3MidCutoverFailureRollsBackAllPriorV3Dml() throws Exception {
+        DataSource ds = createDataSource(REAL_V3_ATOMIC_DB);
+
+        // Step A: apply V1 + V2 using Flyway targeting version 2
+        Flyway flywayV2 = Flyway.configure()
+                .dataSource(ds)
+                .locations("classpath:db/migration")
+                .target("2")
+                .load();
+        flywayV2.migrate();
+
+        // Step B: insert valid legacy fixtures (Branch, Customer, 2 Accounts, 1 Transaction)
+        try (Connection conn = ds.getConnection();
+             Statement stmt = conn.createStatement()) {
+            stmt.execute("INSERT INTO branches (branch_id, address, branch_name, contact_number) " +
+                    "VALUES (1, 'Main Branch', 'Colombo', '+94112345678')");
+            stmt.execute("INSERT INTO customers (customer_id, first_name, last_name, email, phone, date_of_birth, gender, status, address, created_at, updated_at) " +
+                    "VALUES (UUID_TO_BIN('ff000000-0000-0000-0000-000000000001', 0), 'Alice', 'Silva', 'alice.silva@example.test', '+94771234567', '1992-05-15', 'FEMALE', 'ACTIVE', '456 Galle Rd', NOW(), NOW())");
+            stmt.execute("INSERT INTO accounts (account_id, account_number, account_status, account_type, balance, branch_id, customer_id, created_at, updated_at, currency) VALUES " +
+                    "(UUID_TO_BIN('ff000000-0000-0000-0000-000000000002', 0), 'ACC-REAL-001', 'ACTIVE', 'SAVINGS', 2500.7500, 1, UUID_TO_BIN('ff000000-0000-0000-0000-000000000001', 0), NOW(), NOW(), 'LKR'), " +
+                    "(UUID_TO_BIN('ff000000-0000-0000-0000-000000000003', 0), 'ACC-REAL-002', 'ACTIVE', 'CHECKING', 0.0000, 1, UUID_TO_BIN('ff000000-0000-0000-0000-000000000001', 0), NOW(), NOW(), 'LKR')");
+            stmt.execute("INSERT INTO transactions (transaction_id, account_id, amount, balance_after, created_at, description, type) " +
+                    "VALUES (UUID_TO_BIN(UUID(), 0), UUID_TO_BIN('ff000000-0000-0000-0000-000000000002', 0), 2500.75, 2500.75, NOW(), 'Initial Deposit', 'DEPOSIT')");
+
+            // Step C: Verify all V3 preconditions pass before continuing
+            try (ResultSet rs = stmt.executeQuery("SELECT COUNT(*) FROM accounts WHERE balance < 0")) {
+                assertThat(rs.next()).isTrue();
+                assertThat(rs.getInt(1)).as("Precondition A: zero negative balances").isEqualTo(0);
+            }
+            try (ResultSet rs = stmt.executeQuery("SELECT COUNT(*) FROM accounts WHERE BINARY currency != 'LKR'")) {
+                assertThat(rs.next()).isTrue();
+                assertThat(rs.getInt(1)).as("Precondition B: zero non-LKR currencies").isEqualTo(0);
+            }
+            try (ResultSet rs = stmt.executeQuery("SELECT COUNT(*) FROM system_configs WHERE config_key = 'ledger_cutover_at'")) {
+                assertThat(rs.next()).isTrue();
+                assertThat(rs.getInt(1)).as("Precondition C: zero cutover marker").isEqualTo(0);
+            }
+            try (ResultSet rs = stmt.executeQuery("SELECT COUNT(*) FROM ledger_accounts")) {
+                assertThat(rs.next()).isTrue();
+                assertThat(rs.getInt(1)).as("Precondition D1: zero ledger accounts").isEqualTo(0);
+            }
+            try (ResultSet rs = stmt.executeQuery("SELECT COUNT(*) FROM journal_entries")) {
+                assertThat(rs.next()).isTrue();
+                assertThat(rs.getInt(1)).as("Precondition D2: zero journal entries").isEqualTo(0);
+            }
+            try (ResultSet rs = stmt.executeQuery("SELECT COUNT(*) FROM journal_postings")) {
+                assertThat(rs.next()).isTrue();
+                assertThat(rs.getInt(1)).as("Precondition D3: zero journal postings").isEqualTo(0);
+            }
+
+            // Step D: Install test-only failure injector trigger on journal_entries
+            stmt.execute("DROP TRIGGER IF EXISTS trg_test_midcutover_fail");
+            stmt.execute(
+                "CREATE TRIGGER trg_test_midcutover_fail " +
+                "BEFORE INSERT ON journal_entries " +
+                "FOR EACH ROW " +
+                "BEGIN " +
+                "  IF NEW.entry_type = 'OPENING_BALANCE' THEN " +
+                "    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'TEST_ONLY_MIDCUTOVER_FAILURE'; " +
+                "  END IF; " +
+                "END"
+            );
+        }
+
+        // Step E: Run the REAL unchanged V3 migration resource through Flyway
+        Flyway flywayV3 = Flyway.configure()
+                .dataSource(ds)
+                .locations("classpath:db/migration")
+                .load();
+
+        assertThatThrownBy(flywayV3::migrate)
+                .isInstanceOf(FlywayException.class)
+                .hasMessageContaining("TEST_ONLY_MIDCUTOVER_FAILURE");
+
+        // Step F: Assert every rollback invariant
+        try (Connection conn = ds.getConnection();
+             Statement stmt = conn.createStatement()) {
+
+            // 1. Cutover marker
+            try (ResultSet rs = stmt.executeQuery("SELECT COUNT(*) FROM system_configs WHERE config_key = 'ledger_cutover_at'")) {
+                assertThat(rs.next()).isTrue();
+                assertThat(rs.getInt(1)).as("Invariant 1: cutover marker rolled back").isEqualTo(0);
+            }
+
+            // 2. System ledger accounts
+            try (ResultSet rs = stmt.executeQuery("SELECT COUNT(*) FROM ledger_accounts WHERE system_code = 'SYSTEM_VAULT_CASH:LKR'")) {
+                assertThat(rs.next()).isTrue();
+                assertThat(rs.getInt(1)).as("Invariant 2a: SYSTEM_VAULT_CASH rolled back").isEqualTo(0);
+            }
+            try (ResultSet rs = stmt.executeQuery("SELECT COUNT(*) FROM ledger_accounts WHERE system_code = 'SYSTEM_OPENING_BALANCE:LKR'")) {
+                assertThat(rs.next()).isTrue();
+                assertThat(rs.getInt(1)).as("Invariant 2b: SYSTEM_OPENING_BALANCE rolled back").isEqualTo(0);
+            }
+
+            // 3. Customer ledger accounts
+            try (ResultSet rs = stmt.executeQuery("SELECT COUNT(*) FROM ledger_accounts WHERE customer_account_id IS NOT NULL")) {
+                assertThat(rs.next()).isTrue();
+                assertThat(rs.getInt(1)).as("Invariant 3: customer ledger accounts rolled back").isEqualTo(0);
+            }
+
+            // 4. Journal entries
+            try (ResultSet rs = stmt.executeQuery("SELECT COUNT(*) FROM journal_entries")) {
+                assertThat(rs.next()).isTrue();
+                assertThat(rs.getInt(1)).as("Invariant 4: journal_entries empty").isEqualTo(0);
+            }
+
+            // 5. Journal postings
+            try (ResultSet rs = stmt.executeQuery("SELECT COUNT(*) FROM journal_postings")) {
+                assertThat(rs.next()).isTrue();
+                assertThat(rs.getInt(1)).as("Invariant 5: journal_postings empty").isEqualTo(0);
+            }
+
+            // 6. Core transaction idempotency
+            try (ResultSet rs = stmt.executeQuery("SELECT COUNT(*) FROM core_transaction_idempotency")) {
+                assertThat(rs.next()).isTrue();
+                assertThat(rs.getInt(1)).as("Invariant 6: idempotency empty").isEqualTo(0);
+            }
+
+            // 7. Legacy accounts remain unchanged
+            try (ResultSet rs = stmt.executeQuery("SELECT account_number, balance, currency FROM accounts ORDER BY account_number")) {
+                assertThat(rs.next()).isTrue();
+                assertThat(rs.getString("account_number")).isEqualTo("ACC-REAL-001");
+                assertThat(rs.getBigDecimal("balance")).isEqualByComparingTo(new BigDecimal("2500.7500"));
+                assertThat(rs.getString("currency")).isEqualTo("LKR");
+
+                assertThat(rs.next()).isTrue();
+                assertThat(rs.getString("account_number")).isEqualTo("ACC-REAL-002");
+                assertThat(rs.getBigDecimal("balance")).isEqualByComparingTo(new BigDecimal("0.0000"));
+                assertThat(rs.getString("currency")).isEqualTo("LKR");
+                assertThat(rs.next()).isFalse();
+            }
+
+            // 8. Legacy transactions unchanged
+            try (ResultSet rs = stmt.executeQuery("SELECT COUNT(*) FROM transactions")) {
+                assertThat(rs.next()).isTrue();
+                assertThat(rs.getInt(1)).as("Invariant 8: legacy transactions count unchanged (1 row)").isEqualTo(1);
+            }
+
+            // 9. Flyway state: V3 must NOT appear as successful in flyway_schema_history
+            try (ResultSet rs = stmt.executeQuery(
+                    "SELECT COUNT(*) FROM flyway_schema_history WHERE version = '3' AND success = 1")) {
+                assertThat(rs.next()).isTrue();
+                assertThat(rs.getInt(1)).as("Flyway: V3 must NOT be marked successful").isEqualTo(0);
+            }
         }
     }
 }
