@@ -68,4 +68,13 @@ public class GlobalExceptionHandler {
         body.put("message", "Access denied");
         return ResponseEntity.status(HttpStatus.FORBIDDEN).body(body);
     }
+
+    // Conflict (e.g. Idempotency payload mismatch)
+    @ExceptionHandler(ConflictException.class)
+    public ResponseEntity<?> handleConflict(ConflictException ex) {
+        Map<String, Object> body = new HashMap<>();
+        body.put("code", "ERR_CONFLICT");
+        body.put("message", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(body);
+    }
 }

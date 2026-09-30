@@ -13,7 +13,9 @@ import java.util.HexFormat;
 import java.util.Optional;
 import java.util.UUID;
 
+import com.bankingsystem.core.modules.common.exceptions.ConflictException;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.*;
@@ -74,6 +76,31 @@ class IdempotencyTest {
         String result = service.withIdempotency(userA, "   ", operation, "test-request", String.class, () -> "bypassed");
         assertThat(result).isEqualTo("bypassed");
         verifyNoInteractions(repo);
+    }
+
+    @Test
+    void sameUserSameKeyWithDifferentPayloadThrowsConflictAndDoesNotOverwrite() {
+        String storageKey = userA + ":" + operation + ":" + key;
+        String p1 = "\"payload-1\"";
+        String r1 = "\"original-response-R1\"";
+
+        IdempotencyKey stored = new IdempotencyKey();
+        stored.setIdemKey(storageKey);
+        stored.setRequestHash(sha256(p1));
+        stored.setResponseJson(r1);
+
+        when(repo.findById(storageKey)).thenReturn(Optional.of(stored));
+
+        // Submitting with payload-2 must throw ConflictException
+        assertThatThrownBy(() -> service.withIdempotency(userA, key, operation, "payload-2", String.class, () -> "executed-R2"))
+                .isInstanceOf(ConflictException.class);
+
+        // Verification: original record must NOT be overwritten
+        verify(repo, never()).save(any());
+
+        // Subsequent retry with original payload-1 must still return R1
+        String retryResult = service.withIdempotency(userA, key, operation, "payload-1", String.class, () -> "should-not-execute");
+        assertThat(retryResult).isEqualTo("original-response-R1");
     }
 
     private String sha256(String s) {

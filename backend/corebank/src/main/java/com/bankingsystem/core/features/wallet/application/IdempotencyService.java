@@ -31,8 +31,13 @@ public class IdempotencyService {
         Optional<IdempotencyKey> existing = repo.findById(storageKey);
         if (existing.isPresent()) {
             IdempotencyKey i = existing.get();
-            if (hash.equals(i.getRequestHash()) && i.getResponseJson() != null) {
-                return fromJson(i.getResponseJson(), type);
+            if (hash.equals(i.getRequestHash())) {
+                if (i.getResponseJson() != null) {
+                    return fromJson(i.getResponseJson(), type);
+                }
+            } else {
+                throw new com.bankingsystem.core.modules.common.exceptions.ConflictException(
+                        "Idempotency key reuse with different request payload");
             }
         }
         T result = supplier.get();
