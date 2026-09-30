@@ -12,6 +12,7 @@ import java.security.MessageDigest;
 import java.time.Instant;
 import java.util.HexFormat;
 import java.util.Optional;
+import java.util.UUID;
 import java.util.function.Supplier;
 
 @Service
@@ -22,11 +23,12 @@ public class IdempotencyService {
     private final ObjectMapper mapper;
 
     @Transactional
-    public <T> T withIdempotency(String key, Object request, Class<T> type, Supplier<T> supplier) {
+    public <T> T withIdempotency(UUID userId, String key, String operation, Object request, Class<T> type, Supplier<T> supplier) {
         if (key == null || key.isBlank()) return supplier.get();
+        String storageKey = (userId != null ? userId.toString() : "global") + ":" + (operation != null ? operation : "default") + ":" + key;
         String reqJson = toJson(request);
         String hash = sha256(reqJson);
-        Optional<IdempotencyKey> existing = repo.findById(key);
+        Optional<IdempotencyKey> existing = repo.findById(storageKey);
         if (existing.isPresent()) {
             IdempotencyKey i = existing.get();
             if (hash.equals(i.getRequestHash()) && i.getResponseJson() != null) {
@@ -35,7 +37,7 @@ public class IdempotencyService {
         }
         T result = supplier.get();
         String resJson = toJson(result);
-        IdempotencyKey rec = existing.orElseGet(() -> IdempotencyKey.builder().idemKey(key).build());
+        IdempotencyKey rec = existing.orElseGet(() -> IdempotencyKey.builder().idemKey(storageKey).build());
         rec.setRequestHash(hash);
         rec.setResponseJson(resJson);
         if (rec.getCreatedAt() == null) rec.setCreatedAt(Instant.now());

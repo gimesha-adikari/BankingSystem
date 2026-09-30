@@ -75,7 +75,8 @@ public class WalletServiceImpl implements WalletService {
     @Override
     @Transactional
     public PaymentIntentDto createQrPayment(Authentication auth, QrPaymentRequest req, String idemKey) {
-        return idem.withIdempotency(idemKey, req, PaymentIntentDto.class, () ->
+        UUID userId = currentUser.requireUserId(auth);
+        return idem.withIdempotency(userId, idemKey, "QR_PAYMENT", req, PaymentIntentDto.class, () ->
                 createIntent(auth, PaymentType.QR, req.getAmount(), "QR Payment")
         );
     }
@@ -83,7 +84,8 @@ public class WalletServiceImpl implements WalletService {
     @Override
     @Transactional
     public PaymentIntentDto createReloadPayment(Authentication auth, ReloadRequest req, String idemKey) {
-        return idem.withIdempotency(idemKey, req, PaymentIntentDto.class, () ->
+        UUID userId = currentUser.requireUserId(auth);
+        return idem.withIdempotency(userId, idemKey, "RELOAD", req, PaymentIntentDto.class, () ->
                 createIntent(auth, PaymentType.RELOAD, req.getAmount(), "Mobile Reload")
         );
     }
@@ -91,7 +93,8 @@ public class WalletServiceImpl implements WalletService {
     @Override
     @Transactional
     public PaymentIntentDto createBillPayment(Authentication auth, BillPayRequest req, String idemKey) {
-        return idem.withIdempotency(idemKey, req, PaymentIntentDto.class, () ->
+        UUID userId = currentUser.requireUserId(auth);
+        return idem.withIdempotency(userId, idemKey, "BILL", req, PaymentIntentDto.class, () ->
                 createIntent(auth, PaymentType.BILL, req.getAmount(), "Bill Payment")
         );
     }
