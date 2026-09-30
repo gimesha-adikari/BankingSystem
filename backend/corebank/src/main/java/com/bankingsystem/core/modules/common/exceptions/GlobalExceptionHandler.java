@@ -49,6 +49,9 @@ public class GlobalExceptionHandler {
         Map<String, Object> body = new HashMap<>();
         body.put("code", ex.getCode());
         body.put("message", ex.getMessage());
+        if ("ERR_REVERSAL_ORIGINAL_NOT_FOUND".equals(ex.getCode())) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(body);
+        }
         return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY).body(body);
     }
 

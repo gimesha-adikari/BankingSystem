@@ -10,7 +10,7 @@ import com.bankingsystem.core.features.transactions.idempotency.domain.Idempoten
 @RequestMapping("/api/v1/transactions")
 @RequiredArgsConstructor
 public class TransactionController {
-    private final DepositWorkflow deposits; private final WithdrawalWorkflow withdrawals; private final TransferWorkflow transfers; private final AuthenticatedUserIdProvider principal;
+    private final DepositWorkflow deposits; private final WithdrawalWorkflow withdrawals; private final TransferWorkflow transfers; private final ReversalWorkflow reversals; private final AuthenticatedUserIdProvider principal;
 
     @PostMapping("/deposit")
     @PreAuthorize("hasRole('CUSTOMER')")
@@ -28,6 +28,16 @@ public class TransactionController {
     @PreAuthorize("hasRole('CUSTOMER')")
     public ResponseEntity<?> transfer(@Valid @RequestBody TransferRequest request, @RequestHeader(value="Idempotency-Key", required=false) String key, org.springframework.security.core.Authentication auth) {
         return ResponseEntity.ok(transfers.transfer(principal.userId(auth), request.sourceAccountId(), request.destinationAccountId(), request.amount(), requireKey(key)));
+    }
+
+    @PostMapping("/{journalEntryId}/reversal")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<ReversalResponse> reverse(
+            @PathVariable java.util.UUID journalEntryId,
+            @Valid @RequestBody ReversalRequest request,
+            org.springframework.security.core.Authentication auth) {
+        ReversalReceipt receipt = reversals.reverse(principal.userId(auth), journalEntryId, request.reason());
+        return ResponseEntity.ok(ReversalResponse.from(receipt));
     }
 
     @GetMapping
