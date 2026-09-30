@@ -64,3 +64,10 @@ dependencies {
 tasks.named('test') {
 	useJUnitPlatform()
 }
+
+tasks.register('flywayBaseline', JavaExec) {
+	group = 'database'
+	description = 'Executes official Flyway baseline operation via FlywayBaselineOperator'
+	classpath = sourceSets.main.runtimeClasspath
+	mainClass = 'com.bankingsystem.core.database.FlywayBaselineOperator'
+}

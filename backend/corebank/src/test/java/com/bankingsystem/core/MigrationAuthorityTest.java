@@ -170,4 +170,19 @@ public class MigrationAuthorityTest {
                     assertThat(message).contains("missing column [balance] in table [accounts]");
                 });
     }
+
+    @Test
+    @Order(4)
+    void freshBootstrapDoesNotPreloadRuntimeAutoIncrementCounters() throws Exception {
+        DataSource ds = createDataSource(CLEAN_DB_NAME);
+        try (Connection conn = ds.getConnection();
+             Statement stmt = conn.createStatement();
+             ResultSet rs = stmt.executeQuery(
+                     "SELECT AUTO_INCREMENT FROM information_schema.tables WHERE table_schema='" + CLEAN_DB_NAME + "' AND table_name='branches'")) {
+            assertThat(rs.next()).isTrue();
+            long autoInc = rs.getLong(1);
+            // In MySQL, before rows are inserted, AUTO_INCREMENT is 1 (or NULL/0), never 4
+            assertThat(autoInc).isLessThanOrEqualTo(1L);
+        }
+    }
 }

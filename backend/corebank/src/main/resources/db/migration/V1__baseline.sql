@@ -53,7 +53,7 @@ CREATE TABLE `branches` (
   PRIMARY KEY (`branch_id`),
   KEY `FKgtxr6ylr53ynkekntdxn0mwt5` (`manager_employee_id`),
   CONSTRAINT `FKgtxr6ylr53ynkekntdxn0mwt5` FOREIGN KEY (`manager_employee_id`) REFERENCES `employees` (`employee_id`)
-) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 CREATE TABLE `cards` (
   `card_id` binary(16) NOT NULL,
   `card_number` varchar(20) NOT NULL,

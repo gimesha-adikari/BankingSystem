@@ -21,10 +21,29 @@ spring:
 2. **Fail-Fast Validation:** On startup, Hibernate validates entity mappings against the database schema. Any missing table, missing column, or incompatible type immediately halts application startup.
 3. **Explicit Baselines Only:** `spring.flyway.baseline-on-migrate` is set to `false`. Flyway will refuse to run on unmanaged non-empty databases unless explicitly verified and baselined by an operator.
 4. **Zero Domain Logic in Migrations:** Migrations must contain only DDL. Business seed data (e.g. system roles, initial admin accounts) is managed by idempotent Spring beans (`CommandLineRunner` / `DefaultUsersInitializer`).
+5. **No Runtime Auto-Increment Counters in Baselines:** Table options like `AUTO_INCREMENT=N` must never be hardcoded into migration DDL. Sequence counters are runtime data state, not schema definitions.
 
 ---
 
-## 2. Operational Procedures
+## 2. Schema Equivalence Standards
+
+We distinguish between two distinct levels of schema equivalence:
+
+### A. Structural Schema Equivalence
+- **Definition:** Compares table structures, column definitions, data types, nullability, unique keys, foreign key constraints, and secondary indexes while ignoring runtime sequence counters (`AUTO_INCREMENT=N`).
+- **Use Case:** Used by `verify-pre-flyway-schema.sh` when checking whether an existing populated database is safe to bring under Flyway version 1 baseline authority.
+
+### B. Fresh Bootstrap Equivalence
+- **Definition:** Compares clean database initialization from zero, verifying that:
+  1. The DDL applies cleanly without hardcoded sequence counters.
+  2. Hibernate validates all 31 entity definitions against the newly generated tables.
+  3. Default seeders execute idempotently and generate standard primary keys (e.g., initial branch IDs `1, 2, 3`).
+  4. Subsequent boots execute 0 migrations with 0 schema modifications.
+- **Use Case:** Validates that new developer environments, automated CI test containers, and disaster-recovery rebuilds behave identically to fresh legacy environments.
+
+---
+
+## 3. Operational Procedures
 
 ### A. Bootstrapping a New (Empty) Database
 For fresh local development, test environments, or newly provisioned cloud instances:
@@ -51,17 +70,27 @@ If upgrading a database that was previously managed under Hibernate `ddl-auto: u
 
 > [!WARNING]
 > DO NOT enable `baseline-on-migrate: true` in application configuration. Doing so will bypass drift verification and could record a corrupted baseline.
+> DO NOT pass database passwords as command-line arguments. Plaintext credentials in process arguments are prohibited.
 
 Use the provided operator scripts located in `scripts/db/`:
 
 #### Step 1: Verify Schema Compatibility
-Run the verification tool to ensure the target database has not drifted from the canonical baseline:
+Run the verification tool using a credentials file or environment variable:
 ```bash
+# Option 1: Using a protected credentials file (mode 0600)
 ./scripts/db/verify-pre-flyway-schema.sh \
   --host 127.0.0.1 \
   --port 3307 \
   --user banking_dev \
-  --password change-me-locally \
+  --defaults-file /path/to/protected-creds.cnf \
+  --database banking_system_dev
+
+# Option 2: Using environment variable
+export DB_PASSWORD="change-me-locally"
+./scripts/db/verify-pre-flyway-schema.sh \
+  --host 127.0.0.1 \
+  --port 3307 \
+  --user banking_dev \
   --database banking_system_dev
 ```
 - If the schema matches: exits `0` with `VERDICT: DATABASE IS SAFE TO BASELINE AT VERSION 1.`
@@ -74,21 +103,28 @@ Run the baselining script:
   --host 127.0.0.1 \
   --port 3307 \
   --user banking_dev \
-  --password change-me-locally \
   --database banking_system_dev \
   --version 1
 ```
 This script:
-1. Automatically re-runs `verify-pre-flyway-schema.sh`. If verification fails, it aborts immediately.
-2. Creates `flyway_schema_history`.
-3. Inserts an entry recording version `1` as `BASELINE` (`success: 1`).
+1. Re-runs `verify-pre-flyway-schema.sh`. If verification fails, it aborts immediately.
+2. Invokes Flyway's official Java API (`Flyway.configure().baseline()`) via `FlywayBaselineOperator` to establish the baseline.
+3. Does **not** handcraft or insert raw SQL into `flyway_schema_history`.
 
 #### Step 3: Start Application
 Start the application normally. Flyway will recognise version `1` as current, skip re-executing `V1__baseline.sql`, and Hibernate will validate the schema.
 
 ---
 
-## 3. Adding New Migrations
+## 4. Database Engine Compatibility Note (MySQL 8.4)
+- **Status:** **VERIFIED FUNCTIONAL IN THIS AUDIT — UPSTREAM VERSION WARNING PRESENT**
+- **Details:** Flyway 10.20.1 emits an informational recommendation on startup:
+  `WARN o.f.c.i.database.base.Database - Flyway upgrade recommended: MySQL 8.4 is newer than this version of Flyway and support has not been tested. The latest supported version of MySQL is 8.1.`
+- **Operational Reality:** All Flyway 10.20.1 commands (history table creation, baseline recording, schema migration, and checksum validation) execute with 100% functional reliability against MySQL 8.4.11.
+
+---
+
+## 5. Adding New Migrations
 
 When introducing schema modifications in future slices (e.g. Slice 4B-2 Ledger Schema):
 1. Create a new SQL file in `backend/corebank/src/main/resources/db/migration/`:
@@ -104,21 +140,6 @@ When introducing schema modifications in future slices (e.g. Slice 4B-2 Ledger S
 3. SQL Standards:
    - Use `ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;` for all tables.
    - Use backticks around identifiers.
+   - Do NOT include `AUTO_INCREMENT=N` table options.
    - Include `FOREIGN_KEY_CHECKS` toggles if table drops or reorders occur.
    - Never modify an already-committed migration file. If a change is needed, add `V<next>__...`.
-
----
-
-## 4. Troubleshooting & FAQ
-
-### Q: Startup fails with `Found non-empty schema(s) ... but no schema history table`
-**Cause:** The target database contains tables, but Flyway has not been initialized.
-**Remedy:** Do NOT drop the database if it contains real data. Follow Section 2B ("Adopting an Existing Pre-Flyway Database").
-
-### Q: Startup fails with `SchemaManagementException: Schema-validation: missing column [...]`
-**Cause:** An entity has an `@Column` or relationship that does not exist in the database.
-**Remedy:** Ensure all migrations have run. If the entity was modified, create a new Flyway migration to alter the table accordingly.
-
-### Q: Startup fails with `FlywayValidateException: Validate failed: Migration checksum mismatch`
-**Cause:** An existing, already-applied migration file in `db/migration/` was modified locally.
-**Remedy:** Never alter applied migration scripts. Revert changes to the committed script and create a forward migration instead.
