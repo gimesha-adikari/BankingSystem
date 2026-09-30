@@ -183,6 +183,7 @@ public class AuthServiceImpl implements AuthService {
     }
 
     @Override
+    @Transactional
     public void changePassword(String username, ChangePasswordRequest request) {
         User user = userRepository.findByUsername(username)
                 .orElseThrow(() -> new UsernameNotFoundException("User not found"));
@@ -203,7 +204,16 @@ public class AuthServiceImpl implements AuthService {
 
         user.setPasswordHash(passwordEncoder.encode(request.getNewPassword()));
         userRepository.save(user);
+
+        // Phase 4A P1-2: Invalidate all existing sessions for this user
+        sessionRepository.deleteByUserUserId(user.getUserId());
     }
 
-
+    @Override
+    @Transactional
+    public void revokeAllSessions(UUID userId) {
+        if (userId != null) {
+            sessionRepository.deleteByUserUserId(userId);
+        }
+    }
 }
