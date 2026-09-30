@@ -80,4 +80,21 @@ class IdempotencyKeyTest {
         IdempotencyKey differentKey = IdempotencyKey.of("key-xyz-789");
         assertThat(keyUpper).isNotEqualTo(differentKey);
     }
+
+    @Test
+    void nonAsciiCharactersAreRejectedToAvoidAccentCollationMismatch() {
+        assertThatThrownBy(() -> IdempotencyKey.of("café"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("ASCII letters");
+
+        assertThatThrownBy(() -> IdempotencyKey.of("ключ"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("ASCII letters");
+    }
+
+    @Test
+    void supportedPunctuationIsAccepted() {
+        IdempotencyKey key = IdempotencyKey.of("dep-001_A.B:C");
+        assertThat(key.getValue()).isEqualTo("dep-001_A.B:C");
+    }
 }

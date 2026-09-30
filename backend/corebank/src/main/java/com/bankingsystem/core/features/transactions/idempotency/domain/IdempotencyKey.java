@@ -3,6 +3,7 @@ package com.bankingsystem.core.features.transactions.idempotency.domain;
 import java.io.Serializable;
 import java.util.Locale;
 import java.util.Objects;
+import java.util.regex.Pattern;
 
 /**
  * Validated value object representing a client idempotency key.
@@ -13,12 +14,14 @@ import java.util.Objects;
  *   <li>Maximum 128 characters</li>
  *   <li>No control characters (ASCII &lt; 32 or 127)</li>
  *   <li>Explicit whitespace policy: leading/trailing whitespace is NOT silently trimmed; it is rejected</li>
- *   <li>Case-insensitive equality and hash code to match the database's {@code utf8mb4_0900_ai_ci} collation</li>
+ *   <li>ASCII-safe characters only, so Java equality and MySQL {@code utf8mb4_0900_ai_ci} comparison cannot diverge on accent folding</li>
+ *   <li>Case-insensitive equality and hash code to match the database's case-insensitive comparison</li>
  * </ul>
  */
 public final class IdempotencyKey implements Serializable {
 
     private static final int MAX_LENGTH = 128;
+    private static final Pattern SUPPORTED_CHARACTERS = Pattern.compile("^[A-Za-z0-9._:-]+$");
     private final String value;
 
     private IdempotencyKey(String value) {
@@ -36,6 +39,10 @@ public final class IdempotencyKey implements Serializable {
             if (c < 32 || c == 127) {
                 throw new IllegalArgumentException("Idempotency key must not contain control characters");
             }
+        }
+        if (!SUPPORTED_CHARACTERS.matcher(value).matches()) {
+            throw new IllegalArgumentException(
+                    "Idempotency key may contain only ASCII letters, digits, '.', '_', ':', or '-'");
         }
         this.value = value;
     }
