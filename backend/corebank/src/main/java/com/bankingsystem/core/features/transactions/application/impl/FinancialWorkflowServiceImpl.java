@@ -25,6 +25,7 @@ import com.bankingsystem.core.features.transactions.application.TransferWorkflow
 import com.bankingsystem.core.features.transactions.application.WithdrawalReceipt;
 import com.bankingsystem.core.features.transactions.application.WithdrawalWorkflow;
 import com.bankingsystem.core.features.transactions.idempotency.application.CoreIdempotencyCoordinator;
+import com.bankingsystem.core.features.transactions.retry.BoundedFinancialTransactionRetryExecutor;
 import com.bankingsystem.core.features.transactions.idempotency.domain.CoreOperationType;
 import com.bankingsystem.core.features.transactions.idempotency.domain.CoreRequestFingerprint;
 import com.bankingsystem.core.features.transactions.idempotency.domain.IdempotencyKey;
@@ -61,6 +62,7 @@ public class FinancialWorkflowServiceImpl implements DepositWorkflow, Withdrawal
     private static final String SUPPORTED_CURRENCY = "LKR";
 
     private final CoreIdempotencyCoordinator idempotencyCoordinator;
+    private final BoundedFinancialTransactionRetryExecutor retryExecutor;
     private final PostingEngine postingEngine;
     private final AccountRepository accountRepository;
     private final CustomerRepository customerRepository;
@@ -76,13 +78,13 @@ public class FinancialWorkflowServiceImpl implements DepositWorkflow, Withdrawal
         MonetaryAmount amount = requireCustomerAmount(decimalAmount);
         String requestHash = CoreRequestFingerprint.forDeposit(accountId, CurrencyCode.LKR, amount);
 
-        IdempotentCommandResult result = idempotencyCoordinator.execute(
+        IdempotentCommandResult result = retryExecutor.execute("DEPOSIT", () -> idempotencyCoordinator.execute(
                 userId,
                 CoreOperationType.DEPOSIT,
                 key,
                 requestHash,
                 () -> executeDeposit(userId, accountId, amount)
-        );
+        ));
 
         return readDepositReceipt(result);
     }
@@ -96,13 +98,13 @@ public class FinancialWorkflowServiceImpl implements DepositWorkflow, Withdrawal
         MonetaryAmount amount = requireCustomerAmount(decimalAmount);
         String requestHash = CoreRequestFingerprint.forWithdrawal(accountId, CurrencyCode.LKR, amount);
 
-        IdempotentCommandResult result = idempotencyCoordinator.execute(
+        IdempotentCommandResult result = retryExecutor.execute("WITHDRAWAL", () -> idempotencyCoordinator.execute(
                 userId,
                 CoreOperationType.WITHDRAWAL,
                 key,
                 requestHash,
                 () -> executeWithdrawal(userId, accountId, amount)
-        );
+        ));
 
         return readWithdrawalReceipt(result);
     }
@@ -124,13 +126,13 @@ public class FinancialWorkflowServiceImpl implements DepositWorkflow, Withdrawal
         String requestHash = CoreRequestFingerprint.forTransfer(
                 sourceId, destinationId, CurrencyCode.LKR, amount);
 
-        IdempotentCommandResult result = idempotencyCoordinator.execute(
+        IdempotentCommandResult result = retryExecutor.execute("TRANSFER", () -> idempotencyCoordinator.execute(
                 userId,
                 CoreOperationType.TRANSFER,
                 key,
                 requestHash,
                 () -> executeTransfer(userId, sourceId, destinationId, amount)
-        );
+        ));
 
         return readTransferReceipt(result);
     }

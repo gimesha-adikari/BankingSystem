@@ -12,6 +12,7 @@ import com.bankingsystem.core.features.ledger.application.LedgerReconciliationSe
 import com.bankingsystem.core.features.ledger.application.PostingCommand;
 import com.bankingsystem.core.features.ledger.application.PostingEngine;
 import com.bankingsystem.core.features.ledger.application.PostingInstruction;
+import com.bankingsystem.core.features.ledger.application.PostingResult;
 import com.bankingsystem.core.features.ledger.domain.CurrencyCode;
 import com.bankingsystem.core.features.ledger.domain.JournalEntryType;
 import com.bankingsystem.core.features.ledger.domain.LedgerAccount;
@@ -36,6 +37,7 @@ import com.bankingsystem.core.features.transactions.idempotency.domain.CoreOpera
 import com.bankingsystem.core.features.transactions.idempotency.domain.CoreTransactionIdempotency;
 import com.bankingsystem.core.features.transactions.idempotency.domain.IdempotencyConflictException;
 import com.bankingsystem.core.features.transactions.idempotency.domain.repository.CoreTransactionIdempotencyRepository;
+import com.bankingsystem.core.features.transactions.retry.FinancialTransactionRetryExhaustedException;
 import com.bankingsystem.core.modules.common.enums.AccountStatus;
 import com.bankingsystem.core.modules.common.enums.AccountType;
 import com.bankingsystem.core.modules.common.enums.Gender;
@@ -48,10 +50,12 @@ import org.junit.jupiter.api.TestInstance;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.boot.test.mock.mockito.SpyBean;
 
 import javax.sql.DataSource;
 import java.math.BigDecimal;
 import java.sql.Connection;
+import java.sql.SQLException;
 import java.sql.Statement;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -60,6 +64,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -68,6 +73,9 @@ import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.reset;
 
 /**
  * Real-MySQL proof for the internal 4B-7 customer financial workflows.
@@ -123,6 +131,9 @@ class FinancialWorkflowIntegrationTest {
     @Autowired
     private LedgerReconciliationService reconciliationService;
 
+    @SpyBean
+    private PostingEngine postingEngineSpy;
+
     @Autowired
     private DataSource dataSource;
 
@@ -136,7 +147,82 @@ class FinancialWorkflowIntegrationTest {
 
     @AfterEach
     void tearDown() throws Exception {
+        reset(postingEngineSpy);
         cleanTestData();
+    }
+
+    @Test
+    void financialCommandRollsBackFirstAttemptAndCommitsExactlyOnceOnRetry() {
+        TestCustomer alice = createCustomer("retry-financial");
+        Account account = createAccount(alice, "100.00");
+        long journalsBefore = journalEntryRepository.count();
+        long postingsBefore = journalPostingRepository.count();
+        long transactionsBefore = transactionRepository.count();
+        AtomicInteger postInvocations = new AtomicInteger();
+
+        doAnswer(invocation -> {
+            PostingResult result = (PostingResult) invocation.callRealMethod();
+            if (postInvocations.incrementAndGet() == 1) {
+                throw new RuntimeException(new SQLException("deadlock", "40001", 1213));
+            }
+            return result;
+        }).when(postingEngineSpy).post(any(PostingCommand.class));
+
+        DepositReceipt receipt = depositWorkflow.deposit(
+                alice.user().getUserId(), account.getAccountId(), "25.00", "retry-financial-deposit");
+
+        assertThat(postInvocations).hasValue(2);
+        assertThat(receipt.replayed()).isFalse();
+        assertThat(receipt.resultingBalance()).isEqualByComparingTo("125.0000");
+        assertThat(accountRepository.findById(account.getAccountId()).orElseThrow().getBalance())
+                .isEqualByComparingTo("125.0000");
+        assertThat(journalEntryRepository.count()).isEqualTo(journalsBefore + 1);
+        assertThat(journalPostingRepository.count()).isEqualTo(postingsBefore + 2);
+        assertThat(transactionRepository.count()).isEqualTo(transactionsBefore + 1);
+        assertThat(idempotencyRepository.findByUserIdAndOperationTypeAndClientKey(
+                alice.user().getUserId(), CoreOperationType.DEPOSIT, "retry-financial-deposit"))
+                .get().satisfies(claim -> assertThat(claim.getState().name()).isEqualTo("COMPLETED"));
+        assertThat(reconciliationService.reconcileAccount(account.getAccountId()).isClean()).isTrue();
+
+        DepositReceipt replay = depositWorkflow.deposit(
+                alice.user().getUserId(), account.getAccountId(), "25.00", "retry-financial-deposit");
+        assertThat(replay.replayed()).isTrue();
+        assertThat(replay.journalEntryId()).isEqualTo(receipt.journalEntryId());
+        assertThat(journalEntryRepository.count()).isEqualTo(journalsBefore + 1);
+        assertThat(transactionRepository.count()).isEqualTo(transactionsBefore + 1);
+        reset(postingEngineSpy);
+    }
+
+    @Test
+    void financialRetryExhaustionRollsBackEveryAttemptAndLeavesNoResidue() {
+        TestCustomer alice = createCustomer("retry-exhaustion");
+        Account account = createAccount(alice, "100.00");
+        long journalsBefore = journalEntryRepository.count();
+        long postingsBefore = journalPostingRepository.count();
+        long transactionsBefore = transactionRepository.count();
+        AtomicInteger postInvocations = new AtomicInteger();
+
+        doAnswer(invocation -> {
+            PostingResult result = (PostingResult) invocation.callRealMethod();
+            postInvocations.incrementAndGet();
+            throw new RuntimeException(new SQLException("deadlock", "40001", 1213));
+        }).when(postingEngineSpy).post(any(PostingCommand.class));
+
+        assertThatThrownBy(() -> depositWorkflow.deposit(
+                alice.user().getUserId(), account.getAccountId(), "25.00", "retry-exhaustion-deposit"))
+                .isInstanceOf(FinancialTransactionRetryExhaustedException.class)
+                .hasCauseInstanceOf(RuntimeException.class);
+
+        assertThat(postInvocations).hasValue(3);
+        assertThat(accountRepository.findById(account.getAccountId()).orElseThrow().getBalance())
+                .isEqualByComparingTo("100.0000");
+        assertThat(journalEntryRepository.count()).isEqualTo(journalsBefore);
+        assertThat(journalPostingRepository.count()).isEqualTo(postingsBefore);
+        assertThat(transactionRepository.count()).isEqualTo(transactionsBefore);
+        assertThat(idempotencyRepository.findByUserIdAndOperationTypeAndClientKey(
+                alice.user().getUserId(), CoreOperationType.DEPOSIT, "retry-exhaustion-deposit"))
+                .isEmpty();
+        assertThat(reconciliationService.reconcileAccount(account.getAccountId()).isClean()).isTrue();
     }
 
     @Test
