@@ -1,0 +1,7 @@
+<resources>
+    <style name="Theme.BankApp" parent="Theme.Material3.DayNight.NoActionBar">
+        <!-- Transparent bars; Compose controls insets & icon contrast -->
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+    </style>
+</resources>

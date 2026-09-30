@@ -32,10 +32,10 @@ public class Transaction {
     @Column(name = "type", nullable = false, length = 20)
     private TransactionType type;
 
-    @Column(name = "amount", nullable = false, precision = 19, scale = 2)
+    @Column(name = "amount", nullable = false, precision = 19, scale = 4)
     private BigDecimal amount;
 
-    @Column(name = "balance_after", nullable = false, precision = 19, scale = 2)
+    @Column(name = "balance_after", nullable = false, precision = 19, scale = 4)
     private BigDecimal balanceAfter;
 
     @Column(name = "description", length = 255)
@@ -43,5 +43,8 @@ public class Transaction {
 
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
+
+    @Column(name = "journal_entry_id")
+    private UUID journalEntryId;
 
 }

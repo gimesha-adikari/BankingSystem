@@ -30,7 +30,7 @@ const MIN_DEPOSIT: Record<AccountType, number> = {
 
 const BankAccountCreation = () => {
     const { user, loading } = useAuth();
-    const role = user?.role ?? "GUEST";
+    const role = user?.role ?? "TELLER";
     const isTeller = role === "TELLER";
     const isCustomer = role === "CUSTOMER";
 
@@ -83,14 +83,16 @@ const BankAccountCreation = () => {
         );
     }, [customerSearch, customers, isTeller]);
 
-    const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const { name, value } = e.target;
         setErrors((prev) => ({ ...prev, [name]: "" }));
-        if (name === "accountType") {
-            setFormData((p) => ({ ...p, accountType: value as AccountType }));
-        } else if (name === "initialDeposit") {
-            setFormData((p) => ({ ...p, initialDeposit: value }));
-        }
+        if (name === "initialDeposit") setFormData((p) => ({ ...p, initialDeposit: value }));
+    };
+
+    const handleSelectChange = (e: { target: { name: string; value: string } }) => {
+        const { name, value } = e.target;
+        setErrors((prev) => ({ ...prev, [name]: "" }));
+        if (name === "accountType") setFormData((p) => ({ ...p, accountType: value as AccountType }));
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -143,11 +145,12 @@ const BankAccountCreation = () => {
 
             setFormData({ accountType: "SAVINGS", initialDeposit: "" });
             setBranchId(null);
-        } catch (err: any) {
+        } catch (error: unknown) {
+            const err = error as { violations?: Record<string, string>; message?: string };
             if (err.violations) {
                 setErrors(err.violations);
                 const first = Object.values(err.violations)[0];
-                showAlert((first as string) || err.message || "Error creating account");
+                showAlert(first || err.message || "Error creating account");
             } else {
                 showAlert(err.message || "Error creating account");
             }
@@ -247,7 +250,7 @@ const BankAccountCreation = () => {
                                         label="Account Type"
                                         name="accountType"
                                         value={formData.accountType}
-                                        onChange={handleChange}
+                                        onChange={handleSelectChange}
                                         options={[
                                             { value: "SAVINGS", label: "Savings" },
                                             { value: "CHECKING", label: "Checking" },

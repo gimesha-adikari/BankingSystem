@@ -40,7 +40,10 @@ public class Account {
     private AccountStatus accountStatus;
 
     @Column(name = "balance", nullable = false, precision = 19, scale = 4)
-    private BigDecimal balance;
+    private BigDecimal balance = new BigDecimal("0.0000");
+
+    @Column(name = "currency", nullable = false, length = 3)
+    private String currency = "LKR";
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "customer_id", nullable = false)

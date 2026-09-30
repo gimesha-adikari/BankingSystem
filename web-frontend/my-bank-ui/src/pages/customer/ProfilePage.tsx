@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
-import axios from "axios";
+import api from "../../api/axios";
 import Sidebar from "../../components/Sidebar";
 import ChangePasswordModal from "../../models/ChangePasswordModal";
 import { useAlert } from "@/contexts/use-alert";
 import { useUsernameAvailability } from "@/hooks/useUsernameAvailability.ts";
-import { useAuth } from "@/contexts/auth-context.ts";
+import { useAuth, type Role } from "@/contexts/auth-context.ts";
 import PasswordVerification from "../../models/PasswordVerification";
 
 interface UserProfile {
@@ -65,14 +65,9 @@ const Profile = () => {
     useEffect(() => {
         const fetchProfile = async () => {
             try {
-                const token = localStorage.getItem("token");
-                const response = await axios.get("/api/v1/users/me", {
-                    headers: {
-                        Authorization: `Bearer ${token}`,
-                    },
-                });
+                const response = await api.get("/api/v1/users/me");
                 setProfile(response.data);
-            } catch (err: any) {
+            } catch (err: unknown) {
                 setError("Failed to load profile.");
                 console.error(err);
             } finally {
@@ -110,18 +105,11 @@ const Profile = () => {
         }
 
         try {
-            const token = localStorage.getItem("token");
-
             const updatePayload = {
                 [editingField]: tempValue,
             };
 
-            await axios.put("/api/v1/users/me", updatePayload, {
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                    "Content-Type": "application/json",
-                },
-            });
+            await api.put("/api/v1/users/me", updatePayload);
 
             setProfile({
                 ...profile,
@@ -131,51 +119,31 @@ const Profile = () => {
             showAlert("Profile updated successfully", "success");
             setEditingField(null);
             setTempValue("");
-        } catch (err: any) {
+        } catch (err: unknown) {
             console.error("Failed to update profile", err);
             showAlert("Failed to update profile. Please try again.", "error");
         }
     };
 
     const handleUsernamePasswordVerified = async (password: string) => {
-        if (!pendingUsername || !pendingEditingField) return;
+        if (!pendingUsername || !pendingEditingField || !profile) return;
 
         try {
-            const token = localStorage.getItem("token");
-
             const updatePayload = {
                 [pendingEditingField]: pendingUsername,
                 currentPassword: password,
             };
 
-            await axios.put("/api/v1/users/me", updatePayload, {
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                    "Content-Type": "application/json",
-                },
-            });
+            await api.put("/api/v1/users/me", updatePayload);
 
             const username = pendingUsername;
 
-            const response = await fetch("/api/v1/auth/login", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ username, password }),
-            });
-
-            if (!response.ok) {
-                const errorText = await response.text();
-                showAlert("Login failed: " + errorText, "error");
-                return;
-            }
-
-            const data = await response.json();
-
-            localStorage.setItem("token", data.token);
-            localStorage.setItem("username", data.username);
-            localStorage.setItem("role", data.role);
-
-            login(data.token, data.username, data.role);
+            const response = await api.post<{ token: string; username: string; role: Role }>(
+                "/api/v1/auth/login",
+                { username, password }
+            );
+            const data = response.data;
+            await login(data.token, { username: data.username, role: data.role });
 
             setProfile({
                 ...profile,
@@ -185,7 +153,7 @@ const Profile = () => {
             showAlert("Username updated and re-authenticated successfully", "success");
             setEditingField(null);
             setTempValue("");
-        } catch (err: any) {
+        } catch (err: unknown) {
             console.error("Failed to update username", err);
             showAlert("Failed to update username. Please try again.", "error");
         } finally {

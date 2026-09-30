@@ -14,4 +14,8 @@ public interface AccountRepository extends JpaRepository<Account, UUID> {
     List<Account> findByCustomerCustomerId(UUID customerId);
 
     boolean existsByAccountNumber(String accountNumber);
+
+    @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+    @org.springframework.data.jpa.repository.Query("SELECT a FROM Account a WHERE a.accountId = :accountId")
+    java.util.Optional<Account> findByIdForUpdate(@org.springframework.data.repository.query.Param("accountId") UUID accountId);
 }

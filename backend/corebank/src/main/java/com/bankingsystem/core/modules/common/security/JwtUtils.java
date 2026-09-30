@@ -29,6 +29,7 @@ public class JwtUtils {
 
     public String generateJwtToken(String username, String roleName) {
         return Jwts.builder()
+                .setId(java.util.UUID.randomUUID().toString())
                 .setSubject(username)
                 .claim("role", roleName)
                 .setIssuedAt(new Date())

@@ -54,8 +54,7 @@ public class KycCaseServiceImpl implements KycCaseService {
         requireType(byId, UUID.fromString(addressId), "ADDRESS_PROOF", "addressId");
 
         List<KycStatus> active = Arrays.asList(
-                KycStatus.PENDING, KycStatus.AUTO_REVIEW, KycStatus.NEEDS_MORE_INFO
-//               , KycStatus.UNDER_REVIEW
+                KycStatus.PENDING, KycStatus.AUTO_REVIEW, KycStatus.NEEDS_MORE_INFO, KycStatus.UNDER_REVIEW
         );
         KycCase existingActive = cases.findFirstByUserIdAndStatusInOrderByCreatedAtDesc(userId, active).orElse(null);
 

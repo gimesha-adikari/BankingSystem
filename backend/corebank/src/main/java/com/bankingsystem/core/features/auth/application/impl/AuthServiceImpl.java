@@ -99,6 +99,25 @@ public class AuthServiceImpl implements AuthService {
         emailService.sendVerificationEmail(user.getEmail(), token);
     }
 
+    @Override
+    @Transactional
+    public void resendVerification(String email) {
+        String normalizedEmail = email == null ? "" : email.trim();
+        Optional<User> userOpt = userRepository.findByEmail(normalizedEmail);
+        if (userOpt.isEmpty()) return;
+
+        User user = userOpt.get();
+        if (Boolean.TRUE.equals(user.getIsActive()) || user.isEmailVerified()) return;
+
+        String token = UUID.randomUUID().toString();
+        VerificationToken verificationToken = tokenRepository.findByUser(user).orElseGet(VerificationToken::new);
+        verificationToken.setToken(token);
+        verificationToken.setUser(user);
+        verificationToken.setExpiryDate(LocalDateTime.now().plusHours(appProperties.getToken().getExpirationHours()));
+        tokenRepository.save(verificationToken);
+        emailService.sendVerificationEmail(user.getEmail(), token);
+    }
+
     public boolean verifyEmail(String token) {
         VerificationToken verificationToken = tokenRepository.findByToken(token)
                 .orElseThrow(() -> new RuntimeException("Invalid verification token"));
@@ -164,6 +183,7 @@ public class AuthServiceImpl implements AuthService {
     }
 
     @Override
+    @Transactional
     public void changePassword(String username, ChangePasswordRequest request) {
         User user = userRepository.findByUsername(username)
                 .orElseThrow(() -> new UsernameNotFoundException("User not found"));
@@ -184,7 +204,16 @@ public class AuthServiceImpl implements AuthService {
 
         user.setPasswordHash(passwordEncoder.encode(request.getNewPassword()));
         userRepository.save(user);
+
+        // Phase 4A P1-2: Invalidate all existing sessions for this user
+        sessionRepository.deleteByUserUserId(user.getUserId());
     }
 
-
+    @Override
+    @Transactional
+    public void revokeAllSessions(UUID userId) {
+        if (userId != null) {
+            sessionRepository.deleteByUserUserId(userId);
+        }
+    }
 }

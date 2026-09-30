@@ -5,6 +5,7 @@ import InputField from "../../components/InputField";
 import Button from "../../components/Button";
 import AuthFormWrapper from "../../components/AuthFormWrapper";
 import ForgotPasswordModal from "../../models/ForgotPasswordModal";
+import api from "@/api/axios";
 import { useAlert } from "@/contexts/use-alert";
 import { useAuth } from "@/contexts/auth-context";
 
@@ -28,31 +29,18 @@ const Login: React.FC = () => {
     const { showAlert } = useAlert();
     const { login } = useAuth();
 
-    const stateFrom = (location.state as any)?.from?.pathname as string | undefined;
+    const stateFrom = (location.state as { from?: { pathname?: string } } | null)?.from?.pathname;
     const qsFrom = new URLSearchParams(location.search).get("from") || undefined;
     const fromAfterLogin = stateFrom || qsFrom;
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         try {
-            const res = await fetch("/api/v1/auth/login", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ username, password }),
-            });
-
-            const ct = res.headers.get("content-type") || "";
-            const payload = ct.includes("application/json") ? await res.json() : await res.text();
-
-            if (!res.ok) {
-                const msg =
-                    (typeof payload === "string" ? payload : payload?.error || payload?.message) ||
-                    "Login failed";
-                showAlert(msg, "error");
-                return;
-            }
-
-            const data = payload as { token: string; username: string; role: Role };
+            const response = await api.post<{ token: string; username: string; role: Role }>(
+                "/api/v1/auth/login",
+                { username, password }
+            );
+            const data = response.data;
 
             await login(data.token, { username: data.username, role: data.role });
             showAlert("Login successful", "success");

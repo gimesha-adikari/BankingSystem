@@ -5,7 +5,11 @@ import com.bankingsystem.core.features.accounts.interfaces.dto.AccountResponseDT
 import com.bankingsystem.core.features.accounts.domain.Account;
 import com.bankingsystem.core.features.branch.domain.Branch;
 import com.bankingsystem.core.features.customer.domain.Customer;
-import com.bankingsystem.core.features.transactions.domain.Transaction;
+import com.bankingsystem.core.features.ledger.application.PostingCommand;
+import com.bankingsystem.core.features.ledger.application.PostingEngine;
+import com.bankingsystem.core.features.ledger.application.PostingInstruction;
+import com.bankingsystem.core.features.ledger.domain.*;
+import com.bankingsystem.core.features.ledger.domain.repository.LedgerAccountRepository;
 import com.bankingsystem.core.features.auth.domain.User;
 import com.bankingsystem.core.modules.common.enums.AccountStatus;
 import com.bankingsystem.core.modules.common.enums.AccountType;
@@ -14,7 +18,6 @@ import com.bankingsystem.core.modules.common.exceptions.ResourceNotFoundExceptio
 import com.bankingsystem.core.features.accounts.domain.repository.AccountRepository;
 import com.bankingsystem.core.features.branch.domain.repository.BranchRepository;
 import com.bankingsystem.core.features.customer.domain.repository.CustomerRepository;
-import com.bankingsystem.core.features.transactions.domain.repository.TransactionRepository;
 import com.bankingsystem.core.features.auth.domain.repository.UserRepository;
 import com.bankingsystem.core.features.accounts.application.AccountService;
 import lombok.RequiredArgsConstructor;
@@ -22,10 +25,13 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.security.SecureRandom;
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -38,7 +44,8 @@ public class AccountServiceImpl implements AccountService {
     private final UserRepository userRepository;
     private final CustomerRepository customerRepository;
     private final BranchRepository branchRepository;
-    private final TransactionRepository transactionRepository;
+    private final LedgerAccountRepository ledgerAccountRepository;
+    private final PostingEngine postingEngine;
 
     private static final SecureRandom SECURE_RANDOM = new SecureRandom();
     private static final int ACCOUNT_NUMBER_LENGTH = 10;
@@ -69,6 +76,7 @@ public class AccountServiceImpl implements AccountService {
     }
 
     @Override
+    @Transactional
     public AccountResponseDTO openAccount(AccountRequestDTO request, UUID targetUserId) {
         UUID currentUserId = getCurrentUserId();
         User currentUser = userRepository.findById(currentUserId)
@@ -96,27 +104,82 @@ public class AccountServiceImpl implements AccountService {
                     request.getAccountType() + " is " + min);
         }
 
+        // Validate customer monetary amount format (max 2 fractional digits, no silent rounding)
+        MonetaryAmount monetaryDeposit = null;
+        if (deposit.compareTo(BigDecimal.ZERO) > 0) {
+            try {
+                monetaryDeposit = MonetaryAmount.fromCustomerInput(deposit.toPlainString(), CurrencyCode.LKR);
+            } catch (IllegalArgumentException e) {
+                throw new BusinessException("ERR_DEPOSIT_INVALID", e.getMessage());
+            }
+        }
+
+        // If funded opening deposit, resolve and validate counterparty SYSTEM_VAULT_CASH:LKR
+        LedgerAccount vaultAccount = null;
+        if (monetaryDeposit != null) {
+            vaultAccount = ledgerAccountRepository.findBySystemCode("SYSTEM_VAULT_CASH:LKR")
+                    .orElseThrow(() -> new BusinessException("ERR_VAULT_ACCOUNT_NOT_FOUND",
+                            "System vault cash account not found: SYSTEM_VAULT_CASH:LKR"));
+
+            if (vaultAccount.getAccountClass() != LedgerAccountClass.ASSET) {
+                throw new BusinessException("ERR_VAULT_ACCOUNT_INVALID",
+                        "System vault account must be ASSET class, found: " + vaultAccount.getAccountClass());
+            }
+            if (!"LKR".equals(vaultAccount.getCurrency())) {
+                throw new BusinessException("ERR_VAULT_ACCOUNT_INVALID",
+                        "System vault account currency must be LKR, found: " + vaultAccount.getCurrency());
+            }
+            if (vaultAccount.getStatus() != LedgerAccountStatus.ACTIVE) {
+                throw new BusinessException("ERR_VAULT_ACCOUNT_INVALID",
+                        "System vault account is not ACTIVE: " + vaultAccount.getStatus());
+            }
+            if (vaultAccount.getCustomerAccountId() != null) {
+                throw new BusinessException("ERR_VAULT_ACCOUNT_INVALID",
+                        "System vault account must not be linked to a customer account");
+            }
+        }
+
+        // 1. Create Account with structural ZERO balance
         Account account = new Account();
         account.setAccountNumber(generateUniqueAccountNumber());
         account.setAccountType(request.getAccountType());
         account.setAccountStatus(AccountStatus.ACTIVE);
-        account.setBalance(deposit);
+        account.setCurrency("LKR");
         account.setCustomer(customer);
         account.setBranch(branch);
-        account.setCreatedAt(LocalDateTime.now());
-        account.setUpdatedAt(LocalDateTime.now());
+        LocalDateTime now = LocalDateTime.now(ZoneOffset.UTC);
+        account.setCreatedAt(now);
+        account.setUpdatedAt(now);
 
-        account = accountRepository.save(account);
+        account = accountRepository.saveAndFlush(account);
 
-        if (deposit.compareTo(BigDecimal.ZERO) > 0) {
-            Transaction t = new Transaction();
-            t.setAccount(account);
-            t.setType(Transaction.TransactionType.DEPOSIT);
-            t.setAmount(deposit);
-            t.setBalanceAfter(account.getBalance());
-            t.setDescription("Opening deposit");
-            t.setCreatedAt(LocalDateTime.now());
-            transactionRepository.save(t);
+        // 2. Create customer liability LedgerAccount
+        LedgerAccount customerLedgerAccount = new LedgerAccount(
+                UUID.randomUUID(),
+                account.getAccountId(),
+                null,
+                LedgerAccountClass.LIABILITY,
+                "LKR",
+                LedgerAccountStatus.ACTIVE,
+                now
+        );
+        customerLedgerAccount = ledgerAccountRepository.saveAndFlush(customerLedgerAccount);
+
+        // 3. If funded opening deposit, execute balanced posting via PostingEngine
+        if (monetaryDeposit != null) {
+            PostingCommand command = new PostingCommand(
+                    JournalEntryType.DEPOSIT,
+                    CurrencyCode.LKR,
+                    "Opening deposit",
+                    PostingActor.user(currentUserId),
+                    LedgerChannel.WEB,
+                    List.of(
+                            new PostingInstruction(vaultAccount.getLedgerAccountId(), PostingDirection.DEBIT, monetaryDeposit),
+                            new PostingInstruction(customerLedgerAccount.getLedgerAccountId(), PostingDirection.CREDIT, monetaryDeposit)
+                    )
+            );
+            postingEngine.post(command);
+            account = accountRepository.findById(account.getAccountId()).orElseThrow();
         }
 
         return mapToDTO(account);

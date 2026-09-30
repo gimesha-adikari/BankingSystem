@@ -85,6 +85,9 @@ public class PasswordResetServiceImpl implements PasswordResetService {
         prt.setUsed(true);
         tokenRepo.save(prt);
 
+        // Phase 4A P1-3: Revoke all existing sessions for this user on password reset
+        authService.revokeAllSessions(user.getUserId());
+
         log.info("Password reset completed for userId={}", user.getUserId());
     }
 

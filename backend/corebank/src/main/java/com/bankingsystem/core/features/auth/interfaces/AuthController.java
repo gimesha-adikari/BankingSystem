@@ -163,8 +163,9 @@ public class AuthController {
     }
 
     @PostMapping("/resend-verification")
-    public ResponseEntity<?> resendVerification(@RequestBody Object request) {
-        return ResponseEntity.ok("Resend verification email endpoint hit");
+    public ResponseEntity<?> resendVerification(@Valid @RequestBody ForgotPasswordRequest request) {
+        authService.resendVerification(request.getEmail());
+        return ResponseEntity.ok("If an account exists, a verification email has been sent");
     }
 
     @GetMapping("/validate-token")
@@ -188,7 +189,8 @@ public class AuthController {
 
     @PostMapping("/refresh-token")
     public ResponseEntity<?> refreshToken(@RequestBody Map<String, String> payload,
-                                          @RequestHeader("Authorization") String authHeader) {
+                                          @RequestHeader("Authorization") String authHeader,
+                                          HttpServletRequest request) {
         try {
             if (authHeader == null || !authHeader.startsWith("Bearer ")) {
                 return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("error", "Missing or invalid Authorization header"));
@@ -206,11 +208,23 @@ public class AuthController {
                 return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("error", "Token username does not match payload username"));
             }
 
-            String newToken = jwtUtils.generateJwtToken(username, userRepository.findByUsername(username).get().getRole().getRoleName());
+            String role = userRepository.findByUsername(username)
+                    .orElseThrow(() -> new UsernameNotFoundException("User not found"))
+                    .getRole().getRoleName();
+            String newToken = jwtUtils.generateJwtToken(username, role);
+
+            try {
+                authService.logout(token);
+            } catch (RuntimeException ignored) {
+                // Old session might already be inactive
+            }
+
+            String ipAddress = request != null ? request.getRemoteAddr() : "127.0.0.1";
+            authService.createSession(newToken, username, ipAddress);
 
             return ResponseEntity.ok(Map.of("token", newToken));
         } catch (Exception e) {
-            e.printStackTrace();
+            log.error("Could not refresh token", e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of("error", "Could not refresh token"));
         }
     }

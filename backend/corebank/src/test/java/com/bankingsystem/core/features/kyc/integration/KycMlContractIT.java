@@ -15,6 +15,8 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.web.reactive.function.client.WebClient;
 
+import com.bankingsystem.core.features.kyc.integration.MlKycClient.KycAggregateResponse;
+
 public class KycMlContractIT {
 
     static WebClient client;

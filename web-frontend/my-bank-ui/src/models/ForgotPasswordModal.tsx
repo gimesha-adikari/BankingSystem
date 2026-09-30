@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { ChangeEvent, MouseEvent } from "react";
 import InputField from "../components/InputField";
 import api, { type NormalizedError } from "@/api/axios";
