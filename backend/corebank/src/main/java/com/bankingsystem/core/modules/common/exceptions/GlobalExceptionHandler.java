@@ -2,6 +2,8 @@ package com.bankingsystem.core.modules.common.exceptions;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.authorization.AuthorizationDeniedException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ControllerAdvice;
@@ -47,5 +49,23 @@ public class GlobalExceptionHandler {
         body.put("code", "ERR_NOT_FOUND");
         body.put("message", ex.getMessage());
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(body);
+    }
+
+    // Spring Security access denial (PreAuthorize / method security)
+    @ExceptionHandler(AccessDeniedException.class)
+    public ResponseEntity<?> handleAccessDenied(AccessDeniedException ex) {
+        Map<String, Object> body = new HashMap<>();
+        body.put("code", "ERR_FORBIDDEN");
+        body.put("message", "Access denied");
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(body);
+    }
+
+    // Spring Security 6.x AuthorizationDeniedException
+    @ExceptionHandler(AuthorizationDeniedException.class)
+    public ResponseEntity<?> handleAuthorizationDenied(AuthorizationDeniedException ex) {
+        Map<String, Object> body = new HashMap<>();
+        body.put("code", "ERR_FORBIDDEN");
+        body.put("message", "Access denied");
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(body);
     }
 }
