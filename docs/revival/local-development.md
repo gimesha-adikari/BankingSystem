@@ -1,7 +1,7 @@
 # Backend local development
 
-This guide applies to the standalone `gimesha-adikari/BankingSystem` Spring
-Boot repository. The web client, AI/KYC service, and Android application are
+This guide applies to the standalone `gimesha-adikari/bank-core` Spring Boot
+repository. The web client, AI/KYC service, and Android application are
 independent repositories and are not required as sibling directories.
 
 ## Local dependencies
@@ -14,7 +14,7 @@ independent repositories and are not required as sibling directories.
 | Spring Boot backend | `http://127.0.0.1:8080` |
 
 The backend reaches the AI/KYC service through its configured HTTP URL, usually
-`ML_BASE_URL`. It does not assume a local path to the `banking-service` checkout.
+`ML_BASE_URL`. It does not assume a local path to the `bank-service` checkout.
 
 ## Required versions
 
@@ -34,7 +34,7 @@ ignored. Configure `ML_BASE_URL` to the independently running FastAPI service.
 ## Start and validate
 
 ```bash
-# From the BankingSystem repository root.
+# From the bank-core repository root.
 bash ./gradlew test
 bash ./gradlew bootRun --args='--spring.profiles.active=dev'
 ```
@@ -45,6 +45,6 @@ or environment variables; never put database passwords in command arguments.
 
 ## Related repositories
 
-- [bank-web](https://github.com/gimesha-adikari/bank-web) — React/Vite client
-- [banking-service](https://github.com/gimesha-adikari/banking-service) — FastAPI AI/KYC service
-- [BankApp](https://github.com/gimesha-adikari/BankApp) — Android client
+- [bank-web](https://github.com/gimesha-adikari/bank-web) — Next.js client
+- [bank-service](https://github.com/gimesha-adikari/bank-service) — FastAPI AI/KYC service
+- [bank-app](https://github.com/gimesha-adikari/bank-app) — Android client

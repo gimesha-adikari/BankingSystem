@@ -1,15 +1,15 @@
-# BankingSystem
+# bank-core
 
-Spring Boot core banking backend for the BankingSystem project. This repository
-owns the Java API, database migrations, ledger, workflows, authentication, and
-backend tests. The web client, AI/KYC service, and Android client are versioned
-in separate repositories.
+Spring Boot authoritative banking backend for the Banking Platform. This
+repository owns the Java API, database migrations, ledger, workflows,
+authentication, and backend tests. The web client, AI/KYC service, and Android
+client are versioned in separate repositories.
 
 ## Related repositories
 
-- [bank-web](https://github.com/gimesha-adikari/bank-web) — React/Vite web client
-- [banking-service](https://github.com/gimesha-adikari/banking-service) — FastAPI AI/KYC service
-- [BankApp](https://github.com/gimesha-adikari/BankApp) — Android application
+- [bank-web](https://github.com/gimesha-adikari/bank-web) — Next.js web client
+- [bank-service](https://github.com/gimesha-adikari/bank-service) — FastAPI AI/KYC service
+- [bank-app](https://github.com/gimesha-adikari/bank-app) — Android application
 
 These clients and services communicate with this backend through configured HTTP
 endpoints. A sibling checkout is not required for backend compilation or tests.
