@@ -186,8 +186,10 @@ class JwtAuthFilterTest {
         UserDetailsServiceImpl users = mock(UserDetailsServiceImpl.class);
         SessionRepository sessions = mock(SessionRepository.class);
         String token = jwtUtils.generateJwtToken("alice", "CUSTOMER");
-        char last = token.charAt(token.length() - 1);
-        String invalid = token.substring(0, token.length() - 1) + (last == 'a' ? 'b' : 'a');
+        String[] segments = token.split("\\.");
+        char first = segments[2].charAt(0);
+        String invalidSignature = (first == 'A' ? 'B' : 'A') + segments[2].substring(1);
+        String invalid = segments[0] + "." + segments[1] + "." + invalidSignature;
 
         JwtAuthFilter filter = new JwtAuthFilter(jwtUtils, users, sessions);
         MockHttpServletResponse response = invoke(filter, "Bearer " + invalid, new AtomicBoolean());
