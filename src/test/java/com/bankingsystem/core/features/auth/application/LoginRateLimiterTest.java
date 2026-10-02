@@ -60,6 +60,21 @@ class LoginRateLimiterTest {
     }
 
     @Test
+    void deniedIpAdmissionDoesNotConsumeDownstreamBuckets() {
+        ManualTicker ticker = new ManualTicker();
+        LoginRateLimitProperties properties = properties();
+        properties.setIpCapacity(1);
+        properties.setUsernameCapacity(1);
+        properties.setPairCapacity(1);
+        LoginRateLimiter limiter = new LoginRateLimiter(properties, ticker);
+
+        assertThat(limiter.tryAdmit("10.0.0.1", "alice").allowed()).isTrue();
+        assertThat(limiter.tryAdmit("10.0.0.1", "bob").allowed()).isFalse();
+
+        assertThat(limiter.tryAdmit("10.0.0.2", "bob").allowed()).isTrue();
+    }
+
+    @Test
     void canonicalUsernameVariantsShareOneLimiterKey() {
         ManualTicker ticker = new ManualTicker();
         LoginRateLimitProperties properties = properties();

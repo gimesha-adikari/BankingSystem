@@ -46,12 +46,16 @@ public class LoginRateLimiter {
             String pairKey = addressKey + "\u0000" + usernameKey;
 
             Decision ipDecision = consume(ipBuckets, addressKey, properties.getIpCapacity(), properties.getIpRefillPeriod());
+            if (ipDecision.retryAfterNanos() > 0) {
+                return new Admission(false, toRetryAfterSeconds(ipDecision.retryAfterNanos()));
+            }
             Decision usernameDecision = consume(usernameBuckets, usernameKey, properties.getUsernameCapacity(), properties.getUsernameRefillPeriod());
+            if (usernameDecision.retryAfterNanos() > 0) {
+                return new Admission(false, toRetryAfterSeconds(usernameDecision.retryAfterNanos()));
+            }
             Decision pairDecision = consume(pairBuckets, pairKey, properties.getPairCapacity(), properties.getPairRefillPeriod());
-
-            long retryAfter = Math.max(ipDecision.retryAfterNanos(), Math.max(usernameDecision.retryAfterNanos(), pairDecision.retryAfterNanos()));
-            if (retryAfter > 0) {
-                return new Admission(false, toRetryAfterSeconds(retryAfter));
+            if (pairDecision.retryAfterNanos() > 0) {
+                return new Admission(false, toRetryAfterSeconds(pairDecision.retryAfterNanos()));
             }
             return Admission.permitted();
         } catch (LimiterFailureException e) {
