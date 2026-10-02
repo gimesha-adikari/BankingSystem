@@ -70,6 +70,8 @@ public class SecurityConfig {
 
         authProvider.setUserDetailsService(userDetailsService);
         authProvider.setPasswordEncoder(passwordEncoder());
+        authProvider.setPreAuthenticationChecks(user -> {
+        });
 
         return authProvider;
     }

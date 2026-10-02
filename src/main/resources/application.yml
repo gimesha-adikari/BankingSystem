@@ -11,3 +11,17 @@ spring:
 jwt:
   secret: ${JWT_SECRET:}
   expirationMs: ${JWT_EXPIRATION_MS:86400000}
+
+auth:
+  login:
+    rate-limit:
+      enabled: ${AUTH_LOGIN_RATE_LIMIT_ENABLED:true}
+      ip-capacity: ${AUTH_LOGIN_RATE_LIMIT_IP_CAPACITY:20}
+      ip-refill-period: ${AUTH_LOGIN_RATE_LIMIT_IP_REFILL_PERIOD:30s}
+      username-capacity: ${AUTH_LOGIN_RATE_LIMIT_USERNAME_CAPACITY:10}
+      username-refill-period: ${AUTH_LOGIN_RATE_LIMIT_USERNAME_REFILL_PERIOD:60s}
+      pair-capacity: ${AUTH_LOGIN_RATE_LIMIT_PAIR_CAPACITY:5}
+      pair-refill-period: ${AUTH_LOGIN_RATE_LIMIT_PAIR_REFILL_PERIOD:60s}
+      cache-maximum-size: ${AUTH_LOGIN_RATE_LIMIT_CACHE_MAXIMUM_SIZE:10000}
+      cache-expire-after-access: ${AUTH_LOGIN_RATE_LIMIT_CACHE_EXPIRE_AFTER_ACCESS:15m}
+      max-retry-after: ${AUTH_LOGIN_RATE_LIMIT_MAX_RETRY_AFTER:60s}
