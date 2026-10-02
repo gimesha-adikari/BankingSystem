@@ -45,6 +45,9 @@ class JwtAuthFilterTest {
         when(jwtUtils.parseAndValidate(TOKEN)).thenReturn(validClaims());
         when(sessions.findByToken(TOKEN)).thenReturn(Optional.of(session(LocalDateTime.now(Clock.systemUTC()).minusSeconds(1))));
         when(users.loadUserByUsername("alice")).thenReturn(userDetails(true));
+        SecurityContextHolder.getContext().setAuthentication(
+                new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(
+                        "stale", null, List.of(new org.springframework.security.core.authority.SimpleGrantedAuthority("ROLE_ADMIN"))));
 
         JwtAuthFilter filter = new JwtAuthFilter(jwtUtils, users, sessions);
         MockHttpServletResponse response = invoke(filter, "Bearer " + TOKEN, new AtomicBoolean());

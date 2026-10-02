@@ -36,7 +36,10 @@ class MlKycClientTest {
                     userId, null, null, null, null, null, Map.of("caseId", "case-1")));
 
             assertThat(header.get()).isEqualTo(secret);
-            assertThat(body.get()).contains(userId.toString());
+            var payload = new ObjectMapper().readTree(body.get());
+            assertThat(payload.path("bankUserId").asText()).isEqualTo(userId.toString());
+            assertThat(payload.path("meta").has("bankUserId")).isFalse();
+            assertThat(payload.path("meta").path("caseId").asText()).isEqualTo("case-1");
         } finally {
             server.stop(0);
         }
