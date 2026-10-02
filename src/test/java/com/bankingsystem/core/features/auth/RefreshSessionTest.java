@@ -54,6 +54,7 @@ class RefreshSessionTest {
 
         when(request.getRemoteAddr()).thenReturn(ip);
         when(jwtUtils.validateJwtToken(oldToken)).thenReturn(true);
+        when(authService.isSessionValid(oldToken)).thenReturn(true);
         when(jwtUtils.getUserNameFromJwtToken(oldToken)).thenReturn(username);
 
         Role role = new Role();
@@ -78,5 +79,22 @@ class RefreshSessionTest {
 
         // Must create a session for the refreshed token so JwtAuthFilter recognizes it
         verify(authService).createSession(newToken, username, ip);
+    }
+
+    @Test
+    void refreshTokenRejectsExpiredServerSession() {
+        String oldToken = "expired-old-token";
+        when(jwtUtils.validateJwtToken(oldToken)).thenReturn(true);
+        when(authService.isSessionValid(oldToken)).thenReturn(false);
+
+        ResponseEntity<?> response = controller.refreshToken(
+                Map.of("username", "customer1"),
+                "Bearer " + oldToken,
+                request
+        );
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+        verify(authService, never()).logout(oldToken);
+        verify(authService, never()).createSession(anyString(), anyString(), anyString());
     }
 }

@@ -6,9 +6,11 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.List;
+import java.util.UUID;
 
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.springframework.http.HttpHeaders;
@@ -16,17 +18,27 @@ import org.springframework.http.MediaType;
 import org.springframework.web.reactive.function.client.WebClient;
 
 import com.bankingsystem.core.features.kyc.integration.MlKycClient.KycAggregateResponse;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 
+@EnabledIfEnvironmentVariable(named = "BANK_SERVICE_AUTH_SECRET", matches = ".+")
 public class KycMlContractIT {
 
     static WebClient client;
+    static ObjectMapper mapper;
 
     @BeforeAll
     static void setup() {
         String baseUrl = envOr("ML_BASE_URL", "http://127.0.0.1:8000");
+        String serviceSecret = System.getenv("BANK_SERVICE_AUTH_SECRET");
+        if (serviceSecret == null || serviceSecret.isBlank()) {
+            throw new IllegalStateException("BANK_SERVICE_AUTH_SECRET must be configured for the contract test");
+        }
+        mapper = new ObjectMapper();
         client = WebClient.builder()
                 .baseUrl(baseUrl)
                 .defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
+                .defaultHeader("X-Bank-Core-Auth", serviceSecret)
                 .build();
     }
 
@@ -44,9 +56,12 @@ public class KycMlContractIT {
     void contract_case(String resourcePath, String expectedDecision, String mustContainReason) throws IOException {
         String json = readResource(resourcePath);
 
+        ObjectNode payload = (ObjectNode) mapper.readTree(json);
+        payload.put("bankUserId", UUID.randomUUID().toString());
+
         var entity = client.post()
                 .uri("/api/v1/kyc/aggregate")
-                .bodyValue(json)
+                .bodyValue(payload)
                 .retrieve()
                 .toEntity(KycAggregateResponse.class)
                 .block(Duration.ofSeconds(15));

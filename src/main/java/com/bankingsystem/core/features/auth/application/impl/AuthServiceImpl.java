@@ -13,19 +13,18 @@ import com.bankingsystem.core.features.auth.domain.repository.UserRepository;
 import com.bankingsystem.core.features.auth.domain.repository.VerificationTokenRepository;
 import com.bankingsystem.core.features.auth.application.AuthService;
 import com.bankingsystem.core.features.system.application.EmailService;
-import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.time.Clock;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.regex.Pattern;
 
 @Service
-@RequiredArgsConstructor
 public class AuthServiceImpl implements AuthService {
 
     private final UserRepository userRepository;
@@ -36,6 +35,37 @@ public class AuthServiceImpl implements AuthService {
     private final VerificationTokenRepository tokenRepository;
     private final EmailService emailService;
     private final AppProperties appProperties;
+    private final Clock clock;
+
+    public AuthServiceImpl(UserRepository userRepository,
+                           RoleRepository roleRepository,
+                           PasswordEncoder passwordEncoder,
+                           SessionRepository sessionRepository,
+                           VerificationTokenRepository tokenRepository,
+                           EmailService emailService,
+                           AppProperties appProperties) {
+        this(userRepository, roleRepository, passwordEncoder, sessionRepository, tokenRepository,
+                emailService, appProperties, Clock.systemUTC());
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public AuthServiceImpl(UserRepository userRepository,
+                           RoleRepository roleRepository,
+                           PasswordEncoder passwordEncoder,
+                           SessionRepository sessionRepository,
+                           VerificationTokenRepository tokenRepository,
+                           EmailService emailService,
+                           AppProperties appProperties,
+                           Clock clock) {
+        this.userRepository = userRepository;
+        this.roleRepository = roleRepository;
+        this.passwordEncoder = passwordEncoder;
+        this.sessionRepository = sessionRepository;
+        this.tokenRepository = tokenRepository;
+        this.emailService = emailService;
+        this.appProperties = appProperties;
+        this.clock = clock;
+    }
 
     private static final String EMAIL_REGEX = "^[A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+$";
     private static final Pattern EMAIL_PATTERN = Pattern.compile(EMAIL_REGEX);
@@ -143,12 +173,24 @@ public class AuthServiceImpl implements AuthService {
         Session session = new Session();
         session.setUser(user);
         session.setToken(token);
-        session.setLoginTime(LocalDateTime.now());
-        session.setExpiryTime(LocalDateTime.now().plusHours(2));
+        session.setLoginTime(LocalDateTime.now(clock));
+        session.setExpiryTime(LocalDateTime.now(clock).plusHours(2));
         session.setIsActive(true);
         session.setIpAddress(ipAddress);
 
         sessionRepository.save(session);
+    }
+
+    @Override
+    public boolean isSessionValid(String token) {
+        if (token == null || token.isBlank()) {
+            return false;
+        }
+        return sessionRepository.findByToken(token)
+                .map(session -> Boolean.TRUE.equals(session.getIsActive())
+                        && session.getExpiryTime() != null
+                        && session.getExpiryTime().isAfter(LocalDateTime.now(clock)))
+                .orElse(false);
     }
 
     @Override
@@ -159,7 +201,7 @@ public class AuthServiceImpl implements AuthService {
             if (!session.getIsActive()) {
                 throw new RuntimeException("Session already logged out.");
             }
-            session.setLogoutTime(LocalDateTime.now());
+            session.setLogoutTime(LocalDateTime.now(clock));
             session.setIsActive(false);
             sessionRepository.save(session);
         } else {

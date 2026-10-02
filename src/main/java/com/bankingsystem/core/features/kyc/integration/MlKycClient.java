@@ -7,6 +7,7 @@ import org.springframework.web.reactive.function.client.WebClient;
 
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 @Component
 public class MlKycClient {
@@ -38,6 +39,7 @@ public class MlKycClient {
         public String docFrontImage;
         public String docBackImage;
         public String addressProofImage;
+        public UUID bankUserId;
         public Map<String, String> meta;
 
         public KycAggregateRequest() {}
@@ -50,6 +52,12 @@ public class MlKycClient {
             this.docBackImage = docBackImage;
             this.addressProofImage = addressProofImage;
             this.meta = meta;
+        }
+
+        public KycAggregateRequest(UUID bankUserId, String selfie, String docPortraitImage, String docFrontImage,
+                                   String docBackImage, String addressProofImage, Map<String, String> meta) {
+            this(selfie, docPortraitImage, docFrontImage, docBackImage, addressProofImage, meta);
+            this.bankUserId = bankUserId;
         }
     }
 

@@ -109,7 +109,7 @@ public class KycAutoReviewOrchestratorImpl implements KycAutoReviewOrchestrator 
         String billB64   = readB64(c.getAddressId());
 
         MlKycClient.KycAggregateRequest req = new MlKycClient.KycAggregateRequest(
-                selfieB64, null, frontB64, backB64, billB64,
+                c.getUserId(), selfieB64, null, frontB64, backB64, billB64,
                 Map.of("caseId", c.getId())
         );
 

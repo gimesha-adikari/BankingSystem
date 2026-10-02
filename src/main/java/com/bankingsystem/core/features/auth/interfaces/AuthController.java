@@ -202,6 +202,9 @@ public class AuthController {
             if (!jwtUtils.validateJwtToken(token)) {
                 return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("error", "Invalid token"));
             }
+            if (!authService.isSessionValid(token)) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("error", "Invalid session"));
+            }
 
             String tokenUsername = jwtUtils.getUserNameFromJwtToken(token);
             if (!tokenUsername.equals(username)) {

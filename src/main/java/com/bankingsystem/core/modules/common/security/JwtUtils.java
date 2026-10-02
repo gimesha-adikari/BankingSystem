@@ -10,6 +10,7 @@ import org.springframework.stereotype.Component;
 
 import java.nio.charset.StandardCharsets;
 import java.security.Key;
+import java.time.Clock;
 import java.util.Date;
 
 @Component
@@ -17,9 +18,16 @@ public class JwtUtils {
     private static final Logger logger = LoggerFactory.getLogger(JwtUtils.class);
 
     private final JwtProperties jwtProperties;
+    private final Clock clock;
 
     public JwtUtils(JwtProperties jwtProperties) {
+        this(jwtProperties, Clock.systemUTC());
+    }
+
+    public JwtUtils(JwtProperties jwtProperties, Clock clock) {
         this.jwtProperties = jwtProperties;
+        this.clock = clock;
+        this.jwtProperties.validateForRuntime();
     }
 
 
@@ -32,41 +40,54 @@ public class JwtUtils {
                 .setId(java.util.UUID.randomUUID().toString())
                 .setSubject(username)
                 .claim("role", roleName)
-                .setIssuedAt(new Date())
-                .setExpiration(new Date(System.currentTimeMillis() + jwtProperties.getExpirationMs()))
+                .setIssuedAt(Date.from(clock.instant()))
+                .setExpiration(new Date(clock.millis() + jwtProperties.getExpirationMs()))
                 .signWith(getSigningKey(), SignatureAlgorithm.HS256)
                 .compact();
     }
 
     public String getUserNameFromJwtToken(String token) {
-        return Jwts.parserBuilder()
-                .setSigningKey(getSigningKey())
-                .build()
-                .parseClaimsJws(token)
-                .getBody()
-                .getSubject();
+        return parseAndValidate(token).getSubject();
     }
 
     public String getRoleFromJwtToken(String token) {
-        return Jwts.parserBuilder()
-                .setSigningKey(getSigningKey())
-                .build()
-                .parseClaimsJws(token)
-                .getBody()
-                .get("role", String.class);
+        return parseAndValidate(token).get("role", String.class);
     }
 
     public boolean validateJwtToken(String authToken) {
         try {
-            Jwts.parserBuilder()
-                    .setSigningKey(getSigningKey())
-                    .build()
-                    .parseClaimsJws(authToken);
+            parseAndValidate(authToken);
             return true;
-        } catch (JwtException | IllegalArgumentException e) {
-            logger.error("JWT validation error: {}", e.getMessage());
+        } catch (JwtValidationException e) {
+            return false;
         }
-        return false;
+    }
+
+    public Claims parseAndValidate(String token) {
+        if (token == null || token.isBlank()) {
+            logger.warn("AUTH_TOKEN_MALFORMED");
+            throw new JwtValidationException("AUTH_TOKEN_MALFORMED");
+        }
+        try {
+            Claims claims = Jwts.parserBuilder()
+                    .setSigningKey(getSigningKey())
+                    .setClock(() -> Date.from(clock.instant()))
+                    .build()
+                    .parseClaimsJws(token)
+                    .getBody();
+            Date expiration = claims.getExpiration();
+            if (expiration == null || !expiration.after(Date.from(clock.instant()))) {
+                logger.warn("AUTH_TOKEN_EXPIRED");
+                throw new JwtValidationException("AUTH_TOKEN_EXPIRED");
+            }
+            return claims;
+        } catch (ExpiredJwtException e) {
+            logger.warn("AUTH_TOKEN_EXPIRED");
+            throw new JwtValidationException("AUTH_TOKEN_EXPIRED");
+        } catch (JwtException | IllegalArgumentException e) {
+            logger.warn("AUTH_TOKEN_INVALID");
+            throw new JwtValidationException("AUTH_TOKEN_INVALID");
+        }
     }
 
     public String resolveToken(HttpServletRequest request) {
@@ -75,5 +96,11 @@ public class JwtUtils {
             return bearerToken.substring(7);
         }
         return null;
+    }
+
+    public static final class JwtValidationException extends RuntimeException {
+        public JwtValidationException(String category) {
+            super(category);
+        }
     }
 }
