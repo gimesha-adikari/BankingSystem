@@ -34,8 +34,10 @@ server:
     include-message: always
 
 jwt:
-  secret: ${JWT_SECRET:local-development-secret-change-me-before-sharing}
+  secret: ${JWT_SECRET:CHANGE_ME_TO_A_RANDOM_SECRET}
   expirationMs: ${JWT_EXPIRATION_MS:86400000}
+
+BANK_SERVICE_AUTH_SECRET: ${BANK_SERVICE_AUTH_SECRET:CHANGE_ME_TO_A_RANDOM_SECRET}
 
 app:
   token:
