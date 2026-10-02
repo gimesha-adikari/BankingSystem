@@ -16,6 +16,16 @@ class JwtPropertiesTest {
     }
 
     @Test
+    void blankSecretIsRejected() {
+        JwtProperties properties = new JwtProperties();
+        properties.setSecret("   ");
+
+        assertThatThrownBy(properties::validateForRuntime)
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("JWT signing configuration is missing");
+    }
+
+    @Test
     void placeholderAndShortSecretsAreRejected() {
         JwtProperties placeholder = new JwtProperties();
         placeholder.setSecret("CHANGE_ME_TO_A_RANDOM_SECRET");

@@ -9,8 +9,11 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
+import org.springframework.security.authorization.AuthorizationDecision;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.web.access.ExceptionTranslationFilter;
+import org.springframework.security.web.access.intercept.AuthorizationFilter;
 
 import java.time.LocalDateTime;
 import java.time.Clock;
@@ -205,6 +208,38 @@ class JwtAuthFilterTest {
 
         assertThat(response.getStatus()).isEqualTo(401);
         assertThat(continued).isFalse();
+    }
+
+    @Test
+    void bareBearerIsRejected() throws Exception {
+        JwtAuthFilter filter = new JwtAuthFilter(mock(JwtUtils.class), mock(UserDetailsServiceImpl.class), mock(SessionRepository.class));
+        AtomicBoolean continued = new AtomicBoolean();
+
+        MockHttpServletResponse response = invoke(filter, "Bearer", continued);
+
+        assertThat(response.getStatus()).isEqualTo(401);
+        assertThat(continued).isFalse();
+    }
+
+    @Test
+    void wrongRoleRemainsForbidden() throws Exception {
+        SecurityContextHolder.getContext().setAuthentication(
+                new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(
+                        "alice", null, List.of(new org.springframework.security.core.authority.SimpleGrantedAuthority("ROLE_CUSTOMER"))));
+        AuthorizationFilter authorizationFilter = new AuthorizationFilter((authentication, context) ->
+                new AuthorizationDecision(authentication.get() != null && authentication.get().getAuthorities().stream()
+                        .anyMatch(authority -> authority.getAuthority().equals("ROLE_ADMIN"))));
+        ExceptionTranslationFilter exceptionTranslationFilter = new ExceptionTranslationFilter((request, response, exception) ->
+                response.sendError(401));
+        exceptionTranslationFilter.setAccessDeniedHandler((request, response, exception) -> response.sendError(403));
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        exceptionTranslationFilter.doFilter(request, response,
+                (req, res) -> authorizationFilter.doFilter(req, res,
+                        (nextReq, nextRes) -> ((jakarta.servlet.http.HttpServletResponse) nextRes).setStatus(200)));
+
+        assertThat(response.getStatus()).isEqualTo(403);
     }
 
     @Test

@@ -4,6 +4,7 @@ import com.bankingsystem.core.modules.common.config.JwtProperties;
 import io.jsonwebtoken.*;
 import io.jsonwebtoken.security.Keys;
 import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -24,6 +25,7 @@ public class JwtUtils {
         this(jwtProperties, Clock.systemUTC());
     }
 
+    @Autowired
     public JwtUtils(JwtProperties jwtProperties, Clock clock) {
         this.jwtProperties = jwtProperties;
         this.clock = clock;
