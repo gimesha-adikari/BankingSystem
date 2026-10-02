@@ -15,6 +15,8 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.AuthenticationProvider;
 
 import java.util.stream.Stream;
 
@@ -35,6 +37,8 @@ class AuthenticationBeanWiringTest {
             assertThat(context.getBean(JwtAuthFilter.class)).isNotNull();
             assertThat(context.getBean(AuthServiceImpl.class)).isNotNull();
             assertThat(context.getBean(java.time.Clock.class)).isNotNull();
+            assertThat(context.getBean("loginAuthenticationManager", AuthenticationManager.class)).isNotNull();
+            assertThat(context.getBeansOfType(AuthenticationProvider.class)).containsOnlyKeys("authenticationProvider");
         }
     }
 

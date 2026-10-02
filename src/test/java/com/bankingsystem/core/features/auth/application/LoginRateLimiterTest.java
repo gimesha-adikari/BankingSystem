@@ -5,6 +5,7 @@ import com.github.benmanes.caffeine.cache.Ticker;
 import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
+import java.util.UUID;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CyclicBarrier;
@@ -47,16 +48,16 @@ class LoginRateLimiterTest {
         properties.setPairRefillPeriod(Duration.ofSeconds(60));
         LoginRateLimiter limiter = new LoginRateLimiter(properties, ticker);
 
-        assertThat(limiter.tryAdmit("10.0.0.1", "alice").allowed()).isTrue();
-        assertThat(limiter.tryAdmit("10.0.0.1", "alice").allowed()).isTrue();
-        LoginRateLimiter.Admission rejected = limiter.tryAdmit("10.0.0.1", "alice");
+        assertThat(limiter.tryAdmit("10.0.0.1", unknown("alice")).allowed()).isTrue();
+        assertThat(limiter.tryAdmit("10.0.0.1", unknown("alice")).allowed()).isTrue();
+        LoginRateLimiter.Admission rejected = limiter.tryAdmit("10.0.0.1", unknown("alice"));
 
         assertThat(rejected.allowed()).isFalse();
         assertThat(rejected.retryAfterSeconds()).isEqualTo(30);
 
         ticker.advance(Duration.ofSeconds(30));
 
-        assertThat(limiter.tryAdmit("10.0.0.1", "alice").allowed()).isTrue();
+        assertThat(limiter.tryAdmit("10.0.0.1", unknown("alice")).allowed()).isTrue();
     }
 
     @Test
@@ -68,10 +69,29 @@ class LoginRateLimiterTest {
         properties.setPairCapacity(1);
         LoginRateLimiter limiter = new LoginRateLimiter(properties, ticker);
 
-        assertThat(limiter.tryAdmit("10.0.0.1", "alice").allowed()).isTrue();
-        assertThat(limiter.tryAdmit("10.0.0.1", "bob").allowed()).isFalse();
+        assertThat(limiter.tryAdmit("10.0.0.1", unknown("alice")).allowed()).isTrue();
+        assertThat(limiter.tryAdmit("10.0.0.1", unknown("bob")).allowed()).isFalse();
 
-        assertThat(limiter.tryAdmit("10.0.0.2", "bob").allowed()).isTrue();
+        assertThat(limiter.tryAdmit("10.0.0.2", unknown("bob")).allowed()).isTrue();
+    }
+
+    @Test
+    void deniedAccountAdmissionDoesNotConsumePairBucket() {
+        ManualTicker ticker = new ManualTicker();
+        LoginRateLimitProperties properties = properties();
+        properties.setIpCapacity(100);
+        properties.setUsernameCapacity(1);
+        properties.setPairCapacity(2);
+        properties.setUsernameRefillPeriod(Duration.ofSeconds(60));
+        LoginRateLimiter limiter = new LoginRateLimiter(properties, ticker);
+        LoginRateLimitIdentity account = LoginRateLimitIdentity.forAccount(UUID.randomUUID());
+
+        assertThat(limiter.tryAdmit("10.0.0.1", account).allowed()).isTrue();
+        assertThat(limiter.tryAdmit("10.0.0.1", account).allowed()).isFalse();
+
+        ticker.advance(Duration.ofSeconds(60));
+
+        assertThat(limiter.tryAdmit("10.0.0.1", account).allowed()).isTrue();
     }
 
     @Test
@@ -83,9 +103,9 @@ class LoginRateLimiterTest {
         properties.setPairCapacity(100);
         LoginRateLimiter limiter = new LoginRateLimiter(properties, ticker);
 
-        assertThat(limiter.tryAdmit("10.0.0.1", " Alice ").allowed()).isTrue();
-        assertThat(limiter.tryAdmit("10.0.0.1", "alice").allowed()).isTrue();
-        assertThat(limiter.tryAdmit("10.0.0.1", "ALICE").allowed()).isFalse();
+        assertThat(limiter.tryAdmit("10.0.0.1", unknown(" Alice ")).allowed()).isTrue();
+        assertThat(limiter.tryAdmit("10.0.0.1", unknown("alice")).allowed()).isTrue();
+        assertThat(limiter.tryAdmit("10.0.0.1", unknown("ALICE")).allowed()).isFalse();
     }
 
     @Test
@@ -97,13 +117,13 @@ class LoginRateLimiterTest {
         properties.setPairCapacity(1);
         LoginRateLimiter limiter = new LoginRateLimiter(properties, ticker);
 
-        assertThat(limiter.tryAdmit("10.0.0.1", "alice").allowed()).isTrue();
-        assertThat(limiter.tryAdmit("10.0.0.2", "alice").allowed()).isFalse();
+        assertThat(limiter.tryAdmit("10.0.0.1", unknown("alice")).allowed()).isTrue();
+        assertThat(limiter.tryAdmit("10.0.0.2", unknown("alice")).allowed()).isFalse();
 
         ticker.advance(Duration.ofSeconds(60));
 
-        assertThat(limiter.tryAdmit("10.0.0.2", "alice").allowed()).isTrue();
-        assertThat(limiter.tryAdmit("10.0.0.1", "bob").allowed()).isTrue();
+        assertThat(limiter.tryAdmit("10.0.0.2", unknown("alice")).allowed()).isTrue();
+        assertThat(limiter.tryAdmit("10.0.0.1", unknown("bob")).allowed()).isTrue();
     }
 
     @Test
@@ -115,13 +135,13 @@ class LoginRateLimiterTest {
         properties.setPairCapacity(2);
         LoginRateLimiter limiter = new LoginRateLimiter(properties, ticker);
 
-        assertThat(limiter.tryAdmit("10.0.0.1", "alice").allowed()).isTrue();
-        assertThat(limiter.tryAdmit("10.0.0.1", "alice").allowed()).isTrue();
-        assertThat(limiter.tryAdmit("10.0.0.1", "alice").allowed()).isFalse();
+        assertThat(limiter.tryAdmit("10.0.0.1", unknown("alice")).allowed()).isTrue();
+        assertThat(limiter.tryAdmit("10.0.0.1", unknown("alice")).allowed()).isTrue();
+        assertThat(limiter.tryAdmit("10.0.0.1", unknown("alice")).allowed()).isFalse();
 
         ticker.advance(Duration.ofSeconds(60));
 
-        assertThat(limiter.tryAdmit("10.0.0.1", "alice").allowed()).isTrue();
+        assertThat(limiter.tryAdmit("10.0.0.1", unknown("alice")).allowed()).isTrue();
     }
 
     @Test
@@ -133,11 +153,11 @@ class LoginRateLimiterTest {
         properties.setPairCapacity(1);
         LoginRateLimiter limiter = new LoginRateLimiter(properties, ticker);
 
-        assertThat(limiter.tryAdmit("10.0.0.1", "alice").allowed()).isTrue();
-        limiter.resetAfterSuccessfulLogin("10.0.0.1", "alice");
+        assertThat(limiter.tryAdmit("10.0.0.1", unknown("alice")).allowed()).isTrue();
+        limiter.resetAfterSuccessfulLogin("10.0.0.1", unknown("alice"));
 
-        assertThat(limiter.tryAdmit("10.0.0.1", "alice").allowed()).isTrue();
-        assertThat(limiter.tryAdmit("10.0.0.1", "alice").allowed()).isFalse();
+        assertThat(limiter.tryAdmit("10.0.0.1", unknown("alice")).allowed()).isTrue();
+        assertThat(limiter.tryAdmit("10.0.0.1", unknown("alice")).allowed()).isFalse();
     }
 
     @Test
@@ -151,12 +171,12 @@ class LoginRateLimiterTest {
         properties.setMaxRetryAfter(Duration.ofSeconds(60));
         LoginRateLimiter limiter = new LoginRateLimiter(properties, ticker);
 
-        assertThat(limiter.tryAdmit("10.0.0.1", "alice").allowed()).isTrue();
-        assertThat(limiter.tryAdmit("10.0.0.1", "alice").retryAfterSeconds()).isEqualTo(60);
+        assertThat(limiter.tryAdmit("10.0.0.1", unknown("alice")).allowed()).isTrue();
+        assertThat(limiter.tryAdmit("10.0.0.1", unknown("alice")).retryAfterSeconds()).isEqualTo(60);
 
         properties.setEnabled(false);
         LoginRateLimiter disabled = new LoginRateLimiter(properties, ticker);
-        assertThat(disabled.tryAdmit("10.0.0.2", "bob").allowed()).isTrue();
+        assertThat(disabled.tryAdmit("10.0.0.2", unknown("bob")).allowed()).isTrue();
         assertThat(disabled.ipCacheSize()).isZero();
         assertThat(disabled.usernameCacheSize()).isZero();
         assertThat(disabled.pairCacheSize()).isZero();
@@ -171,7 +191,7 @@ class LoginRateLimiterTest {
         LoginRateLimiter limiter = new LoginRateLimiter(properties, ticker);
 
         for (int i = 0; i < 20; i++) {
-            limiter.tryAdmit("10.0.0." + i, "user-" + i);
+            limiter.tryAdmit("10.0.0." + i, unknown("user-" + i));
         }
         limiter.cleanUp();
 
@@ -204,7 +224,7 @@ class LoginRateLimiterTest {
                 int index = i;
                 results.add(executor.submit(() -> {
                     barrier.await(10, TimeUnit.SECONDS);
-                    return limiter.tryAdmit("10.0.0.1", "user-" + index);
+                    return limiter.tryAdmit("10.0.0.1", unknown("user-" + index));
                 }));
             }
 
@@ -254,6 +274,40 @@ class LoginRateLimiterTest {
         properties.setCacheExpireAfterAccess(Duration.ofMinutes(15));
         properties.setMaxRetryAfter(Duration.ofSeconds(60));
         return properties;
+    }
+
+    private static LoginRateLimitIdentity unknown(String username) {
+        return LoginRateLimitIdentity.forUnknown(username);
+    }
+
+    @Test
+    void aliasesUsingOneResolvedUuidShareUsernameAndPairBuckets() {
+        ManualTicker ticker = new ManualTicker();
+        LoginRateLimitProperties properties = properties();
+        properties.setIpCapacity(100);
+        properties.setUsernameCapacity(2);
+        properties.setPairCapacity(2);
+        LoginRateLimiter limiter = new LoginRateLimiter(properties, ticker);
+        LoginRateLimitIdentity account = LoginRateLimitIdentity.forAccount(UUID.randomUUID());
+
+        assertThat(limiter.tryAdmit("10.0.0.1", account).allowed()).isTrue();
+        assertThat(limiter.tryAdmit("10.0.0.1", account).allowed()).isTrue();
+        assertThat(limiter.tryAdmit("10.0.0.1", account).allowed()).isFalse();
+    }
+
+    @Test
+    void resolvedAccountBucketIsSharedAcrossIps() {
+        ManualTicker ticker = new ManualTicker();
+        LoginRateLimitProperties properties = properties();
+        properties.setIpCapacity(100);
+        properties.setUsernameCapacity(2);
+        properties.setPairCapacity(100);
+        LoginRateLimiter limiter = new LoginRateLimiter(properties, ticker);
+        LoginRateLimitIdentity account = LoginRateLimitIdentity.forAccount(UUID.randomUUID());
+
+        assertThat(limiter.tryAdmit("10.0.0.1", account).allowed()).isTrue();
+        assertThat(limiter.tryAdmit("10.0.0.2", account).allowed()).isTrue();
+        assertThat(limiter.tryAdmit("10.0.0.3", account).allowed()).isFalse();
     }
 
     private static final class ManualTicker implements Ticker {

@@ -16,6 +16,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -26,11 +27,14 @@ class LoginAuthenticationServiceTest {
     AuthenticationManager authenticationManager = mock(AuthenticationManager.class);
     UserRepository users = mock(UserRepository.class);
     LoginRateLimiter limiter = mock(LoginRateLimiter.class);
-    LoginAuthenticationService service = new LoginAuthenticationService(authenticationManager, users, limiter);
+    LoginRateLimitIdentityResolver identityResolver = mock(LoginRateLimitIdentityResolver.class);
+    LoginAuthenticationService service = new LoginAuthenticationService(authenticationManager, users, limiter, identityResolver);
+    LoginRateLimitIdentity accountIdentity = LoginRateLimitIdentity.forAccount(UUID.randomUUID());
 
     @BeforeEach
     void setUp() {
-        when(limiter.tryAdmit(anyString(), anyString())).thenReturn(LoginRateLimiter.Admission.permitted());
+        when(identityResolver.resolve(anyString())).thenReturn(accountIdentity);
+        when(limiter.tryAdmit(anyString(), any(LoginRateLimitIdentity.class))).thenReturn(LoginRateLimiter.Admission.permitted());
     }
 
     @AfterEach
@@ -46,7 +50,7 @@ class LoginAuthenticationServiceTest {
         assertThatThrownBy(() -> service.authenticate("missing", "wrong", "10.0.0.1"))
                 .isInstanceOf(BadCredentialsException.class);
 
-        verifyNoInteractions(users);
+        verify(users, never()).findByUsername(anyString());
         verify(authenticationManager).authenticate(any(Authentication.class));
     }
 
@@ -63,7 +67,7 @@ class LoginAuthenticationServiceTest {
         verify(authenticationManager).authenticate(any(Authentication.class));
         verify(users).findByUsername("alice");
         verify(users, never()).save(any(User.class));
-        verify(limiter, never()).resetAfterSuccessfulLogin(anyString(), anyString());
+        verify(limiter, never()).resetAfterSuccessfulLogin(anyString(), any(LoginRateLimitIdentity.class));
     }
 
     @Test
@@ -77,8 +81,9 @@ class LoginAuthenticationServiceTest {
 
         assertThat(result.user()).isSameAs(user);
         assertThat(result.authentication()).isSameAs(authentication);
-        verify(limiter).tryAdmit("10.0.0.1", " alice ");
-        verify(limiter).resetAfterSuccessfulLogin("10.0.0.1", " alice ");
+        verify(identityResolver).resolve(" alice ");
+        verify(limiter).tryAdmit("10.0.0.1", accountIdentity);
+        verify(limiter).resetAfterSuccessfulLogin("10.0.0.1", accountIdentity);
     }
 
     @Test
@@ -95,7 +100,7 @@ class LoginAuthenticationServiceTest {
 
     @Test
     void limiterRejectionPreventsAuthentication() {
-        when(limiter.tryAdmit(anyString(), anyString()))
+        when(limiter.tryAdmit(anyString(), any(LoginRateLimitIdentity.class)))
                 .thenReturn(new LoginRateLimiter.Admission(false, 12));
 
         assertThatThrownBy(() -> service.authenticate("alice", "password", "10.0.0.1"))
@@ -113,6 +118,67 @@ class LoginAuthenticationServiceTest {
                 .isInstanceOf(AuthenticationServiceException.class);
     }
 
+    @Test
+    void unknownIdentityStillInvokesAuthentication() {
+        LoginRateLimitIdentity unknown = LoginRateLimitIdentity.forUnknown("missing");
+        when(identityResolver.resolve("missing")).thenReturn(unknown);
+        when(authenticationManager.authenticate(any(Authentication.class)))
+                .thenThrow(new BadCredentialsException("bad credentials"));
+
+        assertThatThrownBy(() -> service.authenticate("missing", "wrong", "10.0.0.1"))
+                .isInstanceOf(BadCredentialsException.class);
+
+        verify(authenticationManager).authenticate(any(Authentication.class));
+        verify(users, never()).findByUsername(anyString());
+    }
+
+    @Test
+    void identityResolutionFailureStopsAuthenticationAndDoesNotFallback() {
+        when(identityResolver.resolve("alice"))
+                .thenThrow(new LoginRateLimitIdentityResolver.IdentityResolutionException());
+
+        assertThatThrownBy(() -> service.authenticate("alice", "password", "10.0.0.1"))
+                .isInstanceOf(LoginRateLimiter.LimiterFailureException.class);
+
+        verifyNoInteractions(authenticationManager, limiter);
+    }
+
+    @Test
+    void accountIdentityIsRequiredBeforeSuccessfulReset() {
+        when(identityResolver.resolve("alice")).thenReturn(LoginRateLimitIdentity.forUnknown("alice"));
+        when(authenticationManager.authenticate(any(Authentication.class))).thenReturn(authentication("alice"));
+
+        assertThatThrownBy(() -> service.authenticate("alice", "password", "10.0.0.1"))
+                .isInstanceOf(LoginRateLimiter.LimiterFailureException.class);
+
+        verifyNoInteractions(users);
+        verify(limiter, never()).resetAfterSuccessfulLogin(anyString(), any(LoginRateLimitIdentity.class));
+    }
+
+    @Test
+    void authenticatedIdentityDisappearanceRemainsAnInternalFailure() {
+        when(authenticationManager.authenticate(any(Authentication.class))).thenReturn(authentication("alice"));
+        when(users.findByUsername("alice")).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.authenticate("alice", "password", "10.0.0.1"))
+                .isInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
+    void authenticatedUserMustMatchResolvedAccountIdentity() {
+        User resolvedUser = user(true);
+        when(users.findById(accountIdentity.accountId())).thenReturn(Optional.of(resolvedUser));
+        User differentUser = user(true);
+        differentUser.setUserId(UUID.randomUUID());
+        when(users.findByUsername("alice")).thenReturn(Optional.of(differentUser));
+        when(authenticationManager.authenticate(any(Authentication.class))).thenReturn(authentication("alice"));
+
+        assertThatThrownBy(() -> service.authenticate("alice", "password", "10.0.0.1"))
+                .isInstanceOf(IllegalStateException.class);
+
+        verify(limiter, never()).resetAfterSuccessfulLogin(anyString(), any(LoginRateLimitIdentity.class));
+    }
+
     private static Authentication authentication(String username) {
         return new UsernamePasswordAuthenticationToken(
                 username,
@@ -121,10 +187,11 @@ class LoginAuthenticationServiceTest {
         );
     }
 
-    private static User user(boolean active) {
+    private User user(boolean active) {
         User user = new User();
         user.setUsername("alice");
         user.setIsActive(active);
+        user.setUserId(accountIdentity.accountId());
         return user;
     }
 }

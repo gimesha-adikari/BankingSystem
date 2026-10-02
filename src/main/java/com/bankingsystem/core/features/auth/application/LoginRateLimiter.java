@@ -8,7 +8,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.time.Duration;
-import java.util.Locale;
 import java.util.concurrent.atomic.AtomicReference;
 
 @Component
@@ -36,13 +35,13 @@ public class LoginRateLimiter {
         this.pairBuckets = createCache(properties, ticker);
     }
 
-    public Admission tryAdmit(String remoteAddress, String username) {
+    public Admission tryAdmit(String remoteAddress, LoginRateLimitIdentity identity) {
         if (!properties.isEnabled()) {
             return Admission.permitted();
         }
         try {
             String addressKey = canonicalAddress(remoteAddress);
-            String usernameKey = canonicalUsername(username);
+            String usernameKey = identity.key();
             String pairKey = addressKey + "\u0000" + usernameKey;
 
             Decision ipDecision = consume(ipBuckets, addressKey, properties.getIpCapacity(), properties.getIpRefillPeriod());
@@ -65,13 +64,13 @@ public class LoginRateLimiter {
         }
     }
 
-    public void resetAfterSuccessfulLogin(String remoteAddress, String username) {
+    public void resetAfterSuccessfulLogin(String remoteAddress, LoginRateLimitIdentity identity) {
         if (!properties.isEnabled()) {
             return;
         }
         try {
             String addressKey = canonicalAddress(remoteAddress);
-            String usernameKey = canonicalUsername(username);
+            String usernameKey = identity.key();
             usernameBuckets.invalidate(usernameKey);
             pairBuckets.invalidate(addressKey + "\u0000" + usernameKey);
         } catch (RuntimeException e) {
@@ -95,10 +94,6 @@ public class LoginRateLimiter {
         ipBuckets.cleanUp();
         usernameBuckets.cleanUp();
         pairBuckets.cleanUp();
-    }
-
-    static String canonicalUsername(String username) {
-        return username == null ? "" : username.trim().toLowerCase(Locale.ROOT);
     }
 
     private static String canonicalAddress(String remoteAddress) {
