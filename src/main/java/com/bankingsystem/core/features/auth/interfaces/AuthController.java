@@ -4,20 +4,22 @@ import com.bankingsystem.core.features.auth.domain.User;
 import com.bankingsystem.core.features.auth.interfaces.dto.*;
 import com.bankingsystem.core.features.auth.domain.repository.PasswordResetTokenRepository;
 import com.bankingsystem.core.features.auth.domain.repository.UserRepository;
+import com.bankingsystem.core.features.auth.application.LoginAuthenticationService;
+import com.bankingsystem.core.features.auth.application.LoginRateLimiter;
 import com.bankingsystem.core.modules.common.security.JwtUtils;
 import com.bankingsystem.core.features.auth.application.AuthService;
 import com.bankingsystem.core.features.auth.application.PasswordResetService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
-import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.BadCredentialsException;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.Authentication;
+import org.springframework.security.authentication.DisabledException;
+import org.springframework.security.authentication.LockedException;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.web.bind.annotation.*;
@@ -29,16 +31,29 @@ import java.util.Map;
 @Slf4j
 @RestController
 @RequestMapping("/api/v1/auth")
-@RequiredArgsConstructor
 public class AuthController {
 
-    private final AuthenticationManager authenticationManager;
+    private final LoginAuthenticationService loginAuthenticationService;
     private final JwtUtils jwtUtils;
     private final AuthService authService;
     private final UserRepository userRepository;
     private final PasswordResetService resetService;
     private final PasswordResetTokenRepository resetTokenRepository;
 
+    @Autowired
+    public AuthController(LoginAuthenticationService loginAuthenticationService,
+                          JwtUtils jwtUtils,
+                          AuthService authService,
+                          UserRepository userRepository,
+                          PasswordResetService resetService,
+                          PasswordResetTokenRepository resetTokenRepository) {
+        this.loginAuthenticationService = loginAuthenticationService;
+        this.jwtUtils = jwtUtils;
+        this.authService = authService;
+        this.userRepository = userRepository;
+        this.resetService = resetService;
+        this.resetTokenRepository = resetTokenRepository;
+    }
 
     @GetMapping("/available")
     public ResponseEntity<?> isUsernameAvailable(@RequestParam String username) {
@@ -69,39 +84,64 @@ public class AuthController {
     }
 
     @PostMapping("/login")
-    public ResponseEntity<?> authenticateUser(@RequestBody LoginRequest loginRequest, HttpServletRequest request) {
+    public ResponseEntity<?> authenticateUser(@Valid @RequestBody LoginRequest loginRequest, HttpServletRequest request) {
+        SecurityContextHolder.clearContext();
+        ResponseEntity<?> validation = validateLoginRequest(loginRequest);
+        if (validation != null) {
+            return validation;
+        }
         try {
-            User user = userRepository.findByUsername(loginRequest.getUsername())
-                    .orElseThrow(() -> new UsernameNotFoundException("User not found"));
-
-            if (!user.getIsActive()) {
-                return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                        .body(Map.of("error", "Email not verified. Please verify your email first."));
-            }
-
-            Authentication authentication = authenticationManager.authenticate(
-                    new UsernamePasswordAuthenticationToken(loginRequest.getUsername(), loginRequest.getPassword()));
-
-            SecurityContextHolder.getContext().setAuthentication(authentication);
-
+            LoginAuthenticationService.LoginResult result = loginAuthenticationService.authenticate(
+                    loginRequest.getUsername(), loginRequest.getPassword(), request.getRemoteAddr());
+            User user = result.user();
             String role = user.getRole().getRoleName();
+            SecurityContextHolder.getContext().setAuthentication(result.authentication());
             String jwt = jwtUtils.generateJwtToken(loginRequest.getUsername(), role);
-
-            String ipAddress = request.getRemoteAddr();
-            authService.createSession(jwt, loginRequest.getUsername(), ipAddress);
+            authService.createSession(jwt, loginRequest.getUsername(), request.getRemoteAddr());
 
             return ResponseEntity.ok(new JwtResponse(jwt,user.getUsername(),role));
-        } catch (BadCredentialsException e) {
+        } catch (LoginRateLimiter.ThrottledException e) {
+            SecurityContextHolder.clearContext();
+            return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .header("Cache-Control", "no-store")
+                    .header("Retry-After", Long.toString(e.getRetryAfterSeconds()))
+                    .body(Map.of("error", "Too many login attempts. Try again later."));
+        } catch (LoginRateLimiter.LimiterFailureException e) {
+            SecurityContextHolder.clearContext();
+            log.error("AUTH_LOGIN_LIMITER_FAILURE");
+            return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(Map.of("error", "Service temporarily unavailable"));
+        } catch (BadCredentialsException | UsernameNotFoundException | DisabledException | LockedException e) {
+            SecurityContextHolder.clearContext();
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .header("Cache-Control", "no-store")
                     .body(Map.of("error", "Invalid username or password"));
-        } catch (UsernameNotFoundException e) {
-            return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                    .body(Map.of("error", e.getMessage()));
-        } catch (Exception e) {
-            // catch all - for unexpected errors
+        } catch (RuntimeException e) {
+            SecurityContextHolder.clearContext();
+            log.error("AUTH_LOGIN_INTERNAL_FAILURE type={}", e.getClass().getSimpleName());
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .contentType(MediaType.APPLICATION_JSON)
                     .body(Map.of("error", "Internal server error"));
         }
+    }
+
+    private ResponseEntity<?> validateLoginRequest(LoginRequest loginRequest) {
+        Map<String, String> errors = new HashMap<>();
+        if (loginRequest == null || loginRequest.getUsername() == null || loginRequest.getUsername().isBlank()) {
+            errors.put("username", "must not be blank");
+        }
+        if (loginRequest == null || loginRequest.getPassword() == null || loginRequest.getPassword().isBlank()) {
+            errors.put("password", "must not be blank");
+        }
+        if (errors.isEmpty()) {
+            return null;
+        }
+        return ResponseEntity.badRequest()
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(Map.of("code", "ERR_VALIDATION", "message", "Validation failed", "errors", errors));
     }
 
 

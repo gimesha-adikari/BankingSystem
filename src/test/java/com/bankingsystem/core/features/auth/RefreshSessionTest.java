@@ -2,6 +2,7 @@ package com.bankingsystem.core.features.auth;
 
 import com.bankingsystem.core.features.accesscontrol.domain.Role;
 import com.bankingsystem.core.features.auth.application.AuthService;
+import com.bankingsystem.core.features.auth.application.LoginAuthenticationService;
 import com.bankingsystem.core.features.auth.application.PasswordResetService;
 import com.bankingsystem.core.features.auth.domain.User;
 import com.bankingsystem.core.features.auth.domain.repository.PasswordResetTokenRepository;
@@ -13,7 +14,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.authentication.AuthenticationManager;
 
 import java.util.Map;
 import java.util.Optional;
@@ -23,7 +23,7 @@ import static org.mockito.Mockito.*;
 
 class RefreshSessionTest {
 
-    AuthenticationManager authenticationManager = mock(AuthenticationManager.class);
+    LoginAuthenticationService loginAuthenticationService = mock(LoginAuthenticationService.class);
     JwtUtils jwtUtils = mock(JwtUtils.class);
     AuthService authService = mock(AuthService.class);
     UserRepository userRepository = mock(UserRepository.class);
@@ -36,7 +36,7 @@ class RefreshSessionTest {
     @BeforeEach
     void setUp() {
         controller = new AuthController(
-                authenticationManager,
+                loginAuthenticationService,
                 jwtUtils,
                 authService,
                 userRepository,
